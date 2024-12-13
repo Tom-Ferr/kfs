@@ -1,0 +1,5 @@
+*.iso
+*.bin
+*.o
+target
+*.lock
