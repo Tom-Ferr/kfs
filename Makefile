@@ -25,7 +25,7 @@ RUST_PATH = $$HOME/.cargo/bin/
 all: install ${NAME}
 
 check-rust:
-ifeq ($(shell command -v rustc && echo yes || echo no), no)
+ifeq ($(shell command -v ${RUST_PATH}rustc && echo yes || echo no), no)
 	@echo "rust is not installed. Installing rust..."
 	@curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y;
 else
@@ -33,7 +33,7 @@ else
 endif
 
 check-rust-nightly: check-rust
-ifeq ($(shell rustup show | grep -q 'nightly' && echo yes || echo no), no)
+ifeq ($(shell ${RUST_PATH}rustup show | grep -q 'nightly' && echo yes || echo no), no)
 	@echo "rust-nightly is not installed. Installing rust-nightly..."
 	@${RUST_PATH}rustup install nightly
 	@${RUST_PATH}rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
@@ -83,7 +83,7 @@ ${NAME}: ${OBJS} ${LIB}
 ${LIB}:
 	${RUST_PATH}cargo build
 
-install: check-rust-nightly check-xorriso check-qemu check-grub-mkrescue check-grub-pc-bin all
+install: check-rust-nightly check-xorriso check-qemu check-grub-mkrescue check-grub-pc-bin
 
 ${GRUB}: ${NAME}
 	cp ${NAME} ${GRUB};
