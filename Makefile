@@ -17,6 +17,8 @@ LIB = target/kfs-1/debug/libkfs.a
 
 GRUB = isofiles/boot/${NAME}
 
+RUST_PATH = $$HOME/.cargo/bin/
+
 %.o: %.s		
 		${ASM} ${ASM_FLAGS} $< -o $@
 
@@ -30,12 +32,13 @@ else
 	@echo "rust is already installed."
 endif
 
-check-rust-src:
-ifeq ($(shell rustup show | grep -q 'rust-src' && echo yes || echo no), no)
-	@echo "rust-src is not installed. Installing rust-src..."
-	@rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+check-rust-nightly: check-rust
+ifeq ($(shell rustup show | grep -q 'nightly' && echo yes || echo no), no)
+	@echo "rust-nightly is not installed. Installing rust-nightly..."
+	@${RUST_PATH}rustup install nightly
+	@${RUST_PATH}rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
 else
-	@echo "rust-src is already installed."
+	@echo "rust-nightly is already installed."
 endif
 
 check-xorriso:
@@ -65,7 +68,8 @@ endif
 check-grub-pc-bin:
 ifeq ($(shell dpkg -s grub-pc-bin && echo yes || echo no), no)
 	@echo "grub-pc-bin is not installed. Installing grub-pc-bin..."
-	@sudo apt-get update && sudo apt-get install -y grub-pc-bin
+	@sudo apt-get update && sudo DEBIAN_FRONTEND=noninteractive apt-get install -y grub-pc-bin
+
 else
 	@echo "grub-pc-bin is already installed."
 endif
@@ -77,9 +81,9 @@ ${NAME}: ${OBJS} ${LIB}
 
 
 ${LIB}:
-	cargo build
+	${RUST_PATH}cargo build
 
-install: check-rust check-rust-src check-xorriso check-qemu check-grub-mkrescue check-grub-pc-bin all
+install: check-rust-nightly check-xorriso check-qemu check-grub-mkrescue check-grub-pc-bin all
 
 ${GRUB}: ${NAME}
 	cp ${NAME} ${GRUB};
@@ -93,7 +97,7 @@ run: build
 	qemu-system-i386 -cdrom ${ISO}
 
 clean:
-	cargo clean; rm -f ${OBJS}
+	${RUST_PATH}cargo clean; rm -f ${OBJS}
 
 fclean: clean
 	rm -f ${ISO} ${NAME} ${GRUB} Cargo.lock
