@@ -1,6 +1,5 @@
 global start
 extern kernel
-
 section .text
 bits 32
 start:

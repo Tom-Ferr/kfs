@@ -1,8 +1,13 @@
 BOOT_DIR = bootable_base/
 BOOT_FILES = boot.s multiboot_header.s
 LINKER_FILE = ${BOOT_DIR}/linker.ld
-
 BOOT_SRC = $(addprefix $(BOOT_DIR), $(BOOT_FILES))
+
+RUST_DIR = src/
+RUST_FILES = lib.rs io.rs
+RUST_SRC = $(addprefix $(RUST_DIR), $(RUST_FILES))
+
+GRUB_CFG = isofiles/boot/grub/grub.cfg
 
 OBJS = ${BOOT_SRC:.s=.o}
 
@@ -23,6 +28,8 @@ RUST_PATH = $$HOME/.cargo/bin/
 		${ASM} ${ASM_FLAGS} $< -o $@
 
 all: install ${NAME}
+
+install: check-rust-nightly check-xorriso check-qemu check-grub-mkrescue check-grub-pc-bin
 
 check-rust:
 ifeq ($(shell command -v ${RUST_PATH}rustc && echo yes || echo no), no)
@@ -62,20 +69,16 @@ ifeq ($(shell dpkg -s grub-pc-bin && echo yes || echo no), no)
 endif
 
 
-${NAME}: ${OBJS} ${LIB}
-	ld -m elf_i386 -n -o ${NAME} -T ${LINKER_FILE} ${OBJS} ${LIB}
-
-
-
-${LIB}:
+${LIB}: ${RUST_SRC}
 	${RUST_PATH}cargo build
 
-install: check-rust-nightly check-xorriso check-qemu check-grub-mkrescue check-grub-pc-bin
+${NAME}: ${OBJS} ${LIB}
+	ld -m elf_i386 -n -o ${NAME} -T ${LINKER_FILE} ${OBJS} ${LIB}
 
 ${GRUB}: ${NAME}
 	cp ${NAME} ${GRUB};
 
-${ISO}: ${GRUB}
+${ISO}: ${GRUB_CFG} ${GRUB}
 	grub-mkrescue -o ${ISO} ./isofiles
 
 build: ${ISO}
