@@ -61,20 +61,18 @@ pub extern "C" fn kernel() -> ! {
     }
 
     let mut offset: u32 = 0;
-    static mut CAPS_LOCK: bool = false;
-    static mut SHIFT_PRESSED: bool = false;
+    static mut SHIFT_PRESSED: u8 = 0b0;
     loop {
         let scan_code = read_key();
         unsafe{
             if scan_code == 0x2A || scan_code == 0x36{
-                SHIFT_PRESSED = !CAPS_LOCK;
+                SHIFT_PRESSED |= 0b1;
             }
             else if scan_code == 0x2A + 0x80 || scan_code == 0x36 + 0x80{
-                SHIFT_PRESSED = CAPS_LOCK;
+                SHIFT_PRESSED &= 0b10;
             }
             else if scan_code == 0x3A{
-                CAPS_LOCK = !CAPS_LOCK;
-                SHIFT_PRESSED = CAPS_LOCK;
+                SHIFT_PRESSED ^= 0b10;
             }
             if let Some(character) = scan_code_to_ascii(scan_code, SHIFT_PRESSED) {
                 utils::move_buffer_right(offset);
