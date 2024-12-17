@@ -174,6 +174,17 @@ pub fn scan_code_to_ascii(scan_code: u8, shift_key: bool) -> Option<u8> {
             0x2D => Some(b'X'),
             0x15 => Some(b'Y'),
             0x2C => Some(b'Z'),
+
+            0x02 => Some(b'!'),
+            0x03 => Some(b'@'),
+            0x04 => Some(b'#'),
+            0x05 => Some(b'$'),
+            0x06 => Some(b'%'),
+            0x07 => Some(b'^'),
+            0x08 => Some(b'&'),
+            0x09 => Some(b'*'),
+            0x0A => Some(b'('),
+            0x0B => Some(b')'),
         
             0x39 => Some(b' '),
         
