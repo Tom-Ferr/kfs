@@ -1,5 +1,7 @@
 use core::arch::asm;
 
+use crate::utils;
+
 /// VGA Ports
 const VGA_INDEX_PORT: u16 = 0x3D4;
 const VGA_DATA_PORT: u16 = 0x3D5;
@@ -137,8 +139,6 @@ pub fn scan_code_to_ascii(scan_code: u8, shift_key: bool) -> Option<u8> {
         
             0x39 => Some(b' '),
         
-            0x1C => Some(b'\n'),
-        
             // Ignore key releases
             0x80..=0xFF => None,
         
@@ -177,8 +177,6 @@ pub fn scan_code_to_ascii(scan_code: u8, shift_key: bool) -> Option<u8> {
         
             0x39 => Some(b' '),
         
-            0x1C => Some(b'\n'),
-        
             // Ignore key releases
             0x80..=0xFF => None,
         
@@ -188,8 +186,35 @@ pub fn scan_code_to_ascii(scan_code: u8, shift_key: bool) -> Option<u8> {
     }
 }
 
-pub fn put_keyboard_input(character: u8, offset: u32) -> u32{
+pub fn put_keyboard_input(character: u8, mut offset: u32) -> u32{
+    if offset >= 25 * 80 * 2 {
+        offset = scroll_ln(offset);
+    }
     unsafe{put_vga_char(character, offset);}
     set_cursor(offset + 2);
     offset + 2
+}
+
+pub fn get_row_from_offset(offset: u32) -> u32 {
+    offset / (2 * 80)
+}
+
+pub fn get_offset(col: u32, row: u32) -> u32 {
+    2 * (row * 80 + col)
+}
+
+pub fn move_offset_to_new_line(offset: u32) -> u32 {
+    get_offset(0, get_row_from_offset(offset) + 1)
+}
+
+pub fn scroll_ln(offset: u32) -> u32 {
+    let vga_buffer = 0xb8000 as *mut u8;
+    unsafe{
+        utils::memcpy(vga_buffer.offset(get_offset(0, 1) as isize), vga_buffer.offset(get_offset(0, 0) as isize), 80 * (25 - 1) * 2);
+        
+        for col in 0..80 {
+            put_vga_char(b' ', get_offset(col, 25 - 1));
+        }
+    }
+    offset - 2 * 80
 }

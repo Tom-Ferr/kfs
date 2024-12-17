@@ -49,3 +49,12 @@ pub fn move_buffer_right(mut offset: u32){
             *vga_buffer.offset(offset as isize + 3) = *vga_buffer.offset(offset as isize + 1);
         }
 }
+
+pub fn memcpy(source: *mut u8, dest: *mut u8, nbytes: u32) {
+    unsafe{
+
+        for i in 0..nbytes {
+            *dest.offset(i as isize) = *source.offset(i as isize);
+        }
+    }
+}
