@@ -4,7 +4,7 @@ LINKER_FILE = ${BOOT_DIR}/linker.ld
 BOOT_SRC = $(addprefix $(BOOT_DIR), $(BOOT_FILES))
 
 RUST_DIR = src/
-RUST_FILES = lib.rs io.rs utils.rs
+RUST_FILES = lib.rs io.rs utils.rs key_handlers.rs
 RUST_SRC = $(addprefix $(RUST_DIR), $(RUST_FILES))
 
 GRUB_CFG = isofiles/boot/grub/grub.cfg

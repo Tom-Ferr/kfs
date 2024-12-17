@@ -9,6 +9,10 @@ use io::*;
 
 mod utils;
 
+mod key_handlers;
+
+use key_handlers::*;
+
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     loop {}
@@ -68,50 +72,19 @@ pub extern "C" fn kernel() -> ! {
             if scan_code == 0x2A || scan_code == 0x36{
                 SHIFT_PRESSED |= 0b1;
             }
-            else if scan_code == 0x2A + 0x80 || scan_code == 0x36 + 0x80{
+            else if scan_code == 0x2A + 0x80 || scan_code == 0x36 + 0x80{ //SHIFT RELEASE
                 SHIFT_PRESSED &= 0b10;
             }
-            else if scan_code == 0x3A{
+            else if scan_code == 0x3A{ //CAPS-LOCK
                 SHIFT_PRESSED ^= 0b10;
             }
             match scan_code {
-                0x0E => { // backspace
-                    if offset % 160 > 0 {
-                        offset -= 2;
-                        utils::move_buffer_left(offset);
-                        set_cursor(offset);
-                    }
-                }
-                0x4B => { // left arrow
-                    if offset % 160 > 0 {
-                        offset -= 2;
-                        set_cursor(offset);
-                    }
-                }
-                0x4D => { // right arrow
-                    if offset % 160 < utils::buffer_count(get_row_from_offset(offset) * 160) * 2 {
-                        offset += 2;
-                        set_cursor(offset);
-                    }
-                }
-                0x53 => { // delete
-                    if offset % 160 < utils::buffer_count(get_row_from_offset(offset) * 160) * 2 {
-                        utils::move_buffer_left(offset);
-                    }
-                }
-                0x1C => { // enter
-                    offset = move_offset_to_new_line(offset);
-                    if offset >= 25 * 80 * 2 {
-                        offset = scroll_ln(offset);
-                    }
-                    set_cursor(offset);
-                }
-                _ => {
-                    if let Some(character) = scan_code_to_ascii(scan_code, SHIFT_PRESSED) {
-                        utils::move_buffer_right(offset);
-                        offset = put_keyboard_input(character, offset);
-                    }
-                }
+                0x0E => handle_backspace(&mut offset),
+                0x4B => handle_left_arrow(&mut offset),
+                0x4D => handle_right_arrow(&mut offset),
+                0x53 => handle_delete(&mut offset),
+                0x1C => handle_enter(&mut offset),
+                _ => handle_character(scan_code, SHIFT_PRESSED, &mut offset),
             }
             
         }
