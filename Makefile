@@ -69,7 +69,7 @@ ifeq ($(shell dpkg -s grub-pc-bin && echo yes || echo no), no)
 endif
 
 
-${LIB}: ${RUST_SRC}
+${LIB}: ${RUST_SRC} Cargo.toml .cargo/config.toml
 	${RUST_PATH}cargo build
 
 ${NAME}: ${OBJS} ${LIB}
