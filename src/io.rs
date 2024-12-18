@@ -141,6 +141,7 @@ pub fn clear_vga() {
         for i in 0..(25 * 80) {
             put_vga_char(b'\0', i * 2);
         }
+        set_cursor(0);
     }
 }
 
@@ -153,6 +154,18 @@ pub fn set_cursor(mut offset: u32)
         outb(VGA_INDEX_PORT, VGA_OFFSET_LOW as u8);
         outb(VGA_DATA_PORT, (offset & 0xff) as u8);
     }
+}
+
+pub fn get_cursor() -> u32 {
+    let mut offset: u32 = 0;
+    unsafe{
+
+        outb(VGA_INDEX_PORT, VGA_OFFSET_HIGH as u8);
+        offset += (inb(VGA_DATA_PORT) as u32) << 8;
+        outb(VGA_INDEX_PORT, VGA_OFFSET_LOW as u8);
+        offset += inb(VGA_DATA_PORT) as u32;
+    }
+    offset * 2
 }
 
 pub fn scan_code_to_ascii(scan_code: u8, shift_key: u8) -> Option<u8> {

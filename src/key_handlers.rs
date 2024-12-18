@@ -2,6 +2,7 @@
 use crate::utils::*;
 use crate::io::*;
 use crate::commands::*;
+use crate::screens::*;
 
 pub fn handle_backspace(offset: &mut u32) {
     if *offset % 160 > 0 {
@@ -52,4 +53,19 @@ pub fn handle_character(scan_code: u8, shift_pressed: u8, offset: &mut u32) {
         move_buffer_right(*offset);
         *offset = put_keyboard_input(character, *offset);
     }
+}
+pub fn handle_shortcuts() -> Option<Screen> {
+    loop {
+        let scan_code = read_key();
+        unsafe{
+            match scan_code {
+                0x2 => { return Some(Screen::Screen1);},
+                0x3 if CURRENT_SCREEN != Screen::Screen2 => { return Some(Screen::Screen2);},
+                0x26 if CURRENT_SCREEN == Screen::Screen2 => {clear_vga();}
+                0x9D => break,
+                _ => {},
+            }
+        }
+    }
+    None
 }
