@@ -4,13 +4,11 @@
 use core::panic::PanicInfo;
 
 mod io;
+mod utils;
+mod key_handlers;
+mod commands;
 
 use io::*;
-
-mod utils;
-
-mod key_handlers;
-
 use key_handlers::*;
 
 #[panic_handler]

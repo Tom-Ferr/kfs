@@ -1,6 +1,7 @@
 
 use crate::utils::*;
 use crate::io::*;
+use crate::commands::*;
 
 pub fn handle_backspace(offset: &mut u32) {
     if *offset % 160 > 0 {
@@ -34,36 +35,11 @@ pub fn handle_delete(offset: &mut u32) {
 
 pub fn handle_enter(offset: &mut u32) {
     let row_offset = get_row_from_offset(*offset) * 160;
-    if vga_strcmp(row_offset, b"yellow"){
-        paint(row_offset, Color::Yellow as u8);
+    for (command, action) in COMMANDS.iter(){
+        if vga_strcmp(row_offset, command){
+            action(row_offset);
+        }
     }
-    else if vga_strcmp(row_offset, b"magenta"){
-        paint(row_offset, Color::Magenta as u8);
-    }
-    else if vga_strcmp(row_offset, b"cyan"){
-        paint(row_offset, Color::Cyan as u8);
-    }
-    else if vga_strcmp(row_offset, b"red"){
-        paint(row_offset, Color::Red as u8);
-    }
-    else if vga_strcmp(row_offset, b"white"){
-        paint(row_offset, Color::White as u8);
-    }
-    else if vga_strcmp(row_offset, b"blue"){
-        paint(row_offset, Color::Blue as u8);
-    }
-    else if vga_strcmp(row_offset, b"green"){
-        paint(row_offset, Color::Green as u8);
-    }
-    else if vga_strcmp(row_offset, b"pink"){
-        paint(row_offset, Color::Pink as u8);
-    }
-    else if vga_strcmp(row_offset, b"dark"){
-        color_mode(false);
-    }
-    else if vga_strcmp(row_offset, b"light"){
-        color_mode(true);
-    }         
     *offset = move_offset_to_new_line(*offset);
     if *offset >= 25 * 80 * 2 {
         *offset = scroll_ln(*offset);
