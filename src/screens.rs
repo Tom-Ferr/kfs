@@ -22,8 +22,7 @@ static ASCII_ART: &[u8] = b"
 
                  
 
-                  Please, press \'CTRL + 2\' to check bonuses
-               ";
+                  Please, press \'CTRL + 2\' to check bonuses";
 static mut SHIFT_PRESSED: u8 = 0b0;
 
 const L_SHIFT: u8 = 0x2A;
@@ -64,9 +63,7 @@ pub fn screen_1(current_screen: &Screen) -> Screen {
     
     enable_cursor(false);
 
-    let offset = put_vga_string(ASCII_ART, 0);
-
-    set_cursor(offset);
+    put_vga_string(ASCII_ART);
 
     loop {
         let scan_code = read_key();

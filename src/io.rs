@@ -116,22 +116,20 @@ pub unsafe fn put_vga_char(byte: u8, offset: u32) {
         *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | TEXT_COLOR;
 }
 
-pub fn put_vga_string(string: &[u8], mut offset: u32) -> u32 {
-    let mut row = 0;
-    let mut col = 0;
-
+pub fn put_vga_string(string: &[u8]) -> u32 {
+    
+    let mut offset = get_cursor();
     for &byte in string {
         unsafe {
             if byte == b'\n' {
-                row += 1;
-                col = 0;
+                offset = move_offset_to_new_line(offset);
                 continue;
             }
             put_vga_char(byte, offset);
-            col += 1;
-            offset = (row * 80 + col) * 2; // VGA buffer is 80 columns wide
+            offset += 2;
         }
     }
+    set_cursor(offset);
     offset
 }
 
