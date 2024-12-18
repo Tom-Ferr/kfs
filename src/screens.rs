@@ -22,10 +22,9 @@ static ASCII_ART: &[u8] = b"
 
                  
 
-               Please, press \'CTRL + (2 or 3)\' to check bonuses
+                  Please, press \'CTRL + 2\' to check bonuses
                ";
 static mut SHIFT_PRESSED: u8 = 0b0;
-pub static mut CURRENT_SCREEN: Screen = Screen::Screen1;
 
 const L_SHIFT: u8 = 0x2A;
 const R_SHIFT: u8 = 0x36;
@@ -40,7 +39,7 @@ pub enum Screen {
 }
 
 impl Screen {
-    pub fn get_function(&self) -> Option<fn() -> Screen> {
+    pub fn get_function(&self) -> Option<fn(& Screen) -> Screen> {
         match self {
             Screen::Screen1 => Some(screen_1),
             Screen::Screen2 => Some(screen_2),
@@ -50,18 +49,17 @@ impl Screen {
 
 
 pub fn render() -> ! {
-    
+
+    let mut current_screen: Screen = Screen::Screen1;
     loop{
-        unsafe{
-            if let Some(run) = CURRENT_SCREEN.get_function(){
-                CURRENT_SCREEN = run();
+        if let Some(run) = current_screen.get_function(){
+            current_screen = run(&current_screen);
                 
-            }
         }
     }
 }
                
-pub fn screen_1() -> Screen {
+pub fn screen_1(current_screen: &Screen) -> Screen {
     clear_vga();
     
     enable_cursor(false);
@@ -73,19 +71,18 @@ pub fn screen_1() -> Screen {
     loop {
         let scan_code = read_key();
         match scan_code {
-            0x1D => { if let Some(f) = handle_shortcuts(){ return f;} },
+            0x1D => { if let Some(f) = handle_shortcuts(current_screen){ return f;} },
             _ => {}
         }
     }
 }
 
-pub fn screen_2() -> Screen {
+pub fn screen_2(current_screen: &Screen) -> Screen {
     enable_cursor(true);
     clear_vga();
     
-    let mut offset: u32 = 0;
     loop {
-        offset = get_cursor();
+        let mut offset = get_cursor();
         let scan_code = read_key();
         unsafe{
             if scan_code == L_SHIFT || scan_code == R_SHIFT{
@@ -103,7 +100,7 @@ pub fn screen_2() -> Screen {
                 0x4D => handle_right_arrow(&mut offset),
                 0x53 => handle_delete(&mut offset),
                 0x1C => handle_enter(&mut offset),
-                0x1D => { if let Some(f) = handle_shortcuts(){ return f;} },
+                0x1D => { if let Some(f) = handle_shortcuts(current_screen){ return f;} },
                 _ => handle_character(scan_code, SHIFT_PRESSED, &mut offset),
             }
             

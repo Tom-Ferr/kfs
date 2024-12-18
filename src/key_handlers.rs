@@ -54,18 +54,16 @@ pub fn handle_character(scan_code: u8, shift_pressed: u8, offset: &mut u32) {
         *offset = put_keyboard_input(character, *offset);
     }
 }
-pub fn handle_shortcuts() -> Option<Screen> {
+pub fn handle_shortcuts(current_screen: & Screen) -> Option<Screen> {
     loop {
         let scan_code = read_key();
-        unsafe{
-            match scan_code {
-                0x2 => { return Some(Screen::Screen1);},
-                0x3 if CURRENT_SCREEN != Screen::Screen2 => { return Some(Screen::Screen2);},
-                0x26 if CURRENT_SCREEN == Screen::Screen2 => {clear_vga();}
-                0x9D => break,
+        match scan_code {
+            0x2 if *current_screen != Screen::Screen1 => { return Some(Screen::Screen1);},
+            0x3 if *current_screen != Screen::Screen2 => { return Some(Screen::Screen2);},
+            0x26 if *current_screen == Screen::Screen2 => {clear_vga();}
+            0x9D => break,
                 _ => {},
             }
-        }
     }
     None
 }
