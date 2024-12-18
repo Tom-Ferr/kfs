@@ -58,3 +58,17 @@ pub fn memcpy(source: *mut u8, dest: *mut u8, nbytes: u32) {
         }
     }
 }
+
+pub fn vga_strcmp(offset: u32, string: &[u8]) -> bool {
+    let vga_buffer = 0xb8000 as *const u8;
+    
+    unsafe {
+        for (i, &byte) in string.iter().enumerate() {
+            let char_byte = *vga_buffer.offset((offset as usize + (i * 2)) as isize);
+            if char_byte != byte {
+                return false;
+            }
+        }
+    }
+    true
+}

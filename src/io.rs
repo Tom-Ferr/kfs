@@ -8,6 +8,67 @@ const VGA_DATA_PORT: u16 = 0x3D5;
 const VGA_OFFSET_LOW: u16 = 0x0f;
 const VGA_OFFSET_HIGH: u16 = 0x0e;
 
+#[allow(dead_code)]
+#[repr(u8)]
+pub enum Color {
+    Black = 0x0,
+    Blue = 0x1,
+    Green = 0x2,
+    Cyan = 0x3,
+    Red = 0x4,
+    Magenta = 0x5,
+    Brown = 0x6,
+    LightGray = 0x7,
+    DarkGray = 0x8,
+    LightBlue = 0x9,
+    LightGreen = 0xa,
+    LightCyan = 0xb,
+    LightRed = 0xc,
+    Pink = 0xd,
+    Yellow = 0xe,
+    White = 0xf,
+}
+
+static mut TEXT_COLOR: u8 = Color::LightGreen as u8;
+static mut BACKGROUND_COLOR: u8 = Color::Black as u8;
+
+pub fn paint(mut offset: u32, color: u8) {
+    unsafe{
+        let vga_buffer = 0xb8000 as *mut u8;
+        let count = utils::buffer_count(offset);
+        for _ in 0..count{
+            *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | color;
+            offset += 2;
+        }
+    }
+}
+
+pub fn color_mode(light: bool) {
+    unsafe{
+        let prev_text_color: u8 = TEXT_COLOR;
+        if light == false{
+            TEXT_COLOR = Color::LightGreen as u8;
+            BACKGROUND_COLOR = Color::Black as u8;
+        }
+        else{
+            TEXT_COLOR = Color::LightCyan as u8;
+            BACKGROUND_COLOR = Color::DarkGray as u8;
+        }
+        let vga_buffer = 0xb8000 as *mut u8;
+        let mut offset: u32 = 0;
+        for _ in 0..(25 * 80) {
+            let current: u8 = *vga_buffer.offset(offset as isize + 1) & 0b1111;
+            let mut color = TEXT_COLOR;
+            if current != prev_text_color {
+                color = current;
+            }
+            *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | color;
+            offset += 2;
+        }
+
+    }
+}
+
 /// Write a byte to an I/O port
 unsafe fn outb(port: u16, value: u8) {
     asm!("out dx, al", in("dx") port, in("al") value);
@@ -52,7 +113,7 @@ pub fn read_key() -> u8 {
 pub unsafe fn put_vga_char(byte: u8, offset: u32) {
         let vga_buffer = 0xb8000 as *mut u8;
         *vga_buffer.offset(offset as isize) = byte;
-        *vga_buffer.offset(offset as isize + 1) = 0xa; // Light green text on black
+        *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | TEXT_COLOR;
 }
 
 pub fn put_vga_string(string: &[u8], mut offset: u32) -> u32 {
