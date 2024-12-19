@@ -1,5 +1,6 @@
 use crate::io::*;
 use crate::key_handlers::*;
+use crate::printf;
 
 static ASCII_ART: &[u8] = b"
            +++++[>++[>+>+        ++>++++>++++>++++>++++++
@@ -18,11 +19,8 @@ static ASCII_ART: &[u8] = b"
                  <<.>...            .....>...
                  <......           .>>>.<<..
                  <<.>...          .....>...<......>.>>.<.<<<
-                 .>......        ..>>...<<....>>.....>.<..>.
+                 .>......        ..>>...<<....>>.....>.<..>.";
 
-                 
-
-                  Please, press \'CTRL + 2\' to check bonuses";
 static mut SHIFT_PRESSED: u8 = 0b0;
 
 const L_SHIFT: u8 = 0x2A;
@@ -64,6 +62,9 @@ pub fn screen_1(current_screen: &Screen) -> Screen {
     enable_cursor(false);
 
     put_vga_string(ASCII_ART);
+
+    printf!("\n\n\n\n                  Please, press \'{}\' to check bonuses", "CTRL + 2");
+
 
     loop {
         let scan_code = read_key();

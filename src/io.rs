@@ -1,4 +1,5 @@
 use core::arch::asm;
+use core::fmt;
 
 use crate::utils;
 
@@ -7,6 +8,13 @@ const VGA_INDEX_PORT: u16 = 0x3D4;
 const VGA_DATA_PORT: u16 = 0x3D5;
 const VGA_OFFSET_LOW: u16 = 0x0f;
 const VGA_OFFSET_HIGH: u16 = 0x0e;
+
+#[macro_export]
+macro_rules! printf {
+    ($($arg:tt)*) => {
+        $crate::io::_print_fmt_str(core::format_args!($($arg)*));
+    };
+}
 
 #[allow(dead_code)]
 #[repr(u8)]
@@ -27,6 +35,37 @@ pub enum Color {
     Pink = 0xd,
     Yellow = 0xe,
     White = 0xf,
+}
+#[allow(dead_code)]
+const INFO_TEXT_COLOR: Color = Color::White;
+
+#[allow(dead_code)]
+const INFO_BG_COLOR: Color = Color::Black;
+
+#[allow(dead_code)]
+const WARNING_TEXT_COLOR: Color = Color::Black;
+
+#[allow(dead_code)]
+const WARNING_BG_COLOR: Color = Color::Yellow;
+
+#[allow(dead_code)]
+const ERROR_TEXT_COLOR: Color = Color::White;
+
+#[allow(dead_code)]
+const ERROR_BG_COLOR: Color = Color::Red;
+
+#[allow(dead_code)]
+const DEBUG_TEXT_COLOR: Color = Color::Green;
+
+#[allow(dead_code)]
+const DEBUG_BG_COLOR: Color = Color::Black;
+
+#[allow(dead_code)]
+pub enum LogLevel {
+    INFO,
+    WARNING,
+    ERROR,
+    DEBUG,
 }
 
 static mut TEXT_COLOR: u8 = Color::LightGreen as u8;
@@ -110,13 +149,66 @@ pub fn read_key() -> u8 {
     }
 }
 
+pub struct Writer;
+
+impl Writer {
+    pub fn new() -> Self {
+        Writer
+    }
+}
+
+impl Writer {
+
+    pub fn write_string(string: &[u8]){
+        put_vga_string(string);
+    }
+}
+
+impl fmt::Write for Writer {
+    fn write_str(&mut self, s: &str) -> fmt::Result {
+        Writer::write_string(s.as_bytes());
+        Ok(())
+    }
+}
+
+pub fn _print_fmt_str(args: core::fmt::Arguments) {
+    use core::fmt::Write;
+    let mut writer = Writer::new();
+    let _ = writer.write_fmt(args);
+}
+
+#[allow(dead_code)]
+pub fn printk(level: LogLevel, message: &str) {
+    let (text_color, background_color, level_prefix) = match level {
+        LogLevel::INFO => (INFO_TEXT_COLOR, INFO_BG_COLOR, "\n[INFO] "),
+        LogLevel::WARNING => (WARNING_TEXT_COLOR, WARNING_BG_COLOR, "\n[WARNING] "),
+        LogLevel::ERROR => (ERROR_TEXT_COLOR, ERROR_BG_COLOR, "\n[ERROR] "),
+        LogLevel::DEBUG => (DEBUG_TEXT_COLOR, DEBUG_BG_COLOR, "\n[DEBUG] "),
+    };
+
+    unsafe{
+        let prev_text_color = TEXT_COLOR;
+        let prev_background_color = BACKGROUND_COLOR;
+
+        TEXT_COLOR = text_color as u8;
+        BACKGROUND_COLOR = background_color as u8;
+        
+        put_vga_string(level_prefix.as_bytes());
+        
+        put_vga_string(message.as_bytes());
+        
+        TEXT_COLOR = prev_text_color;
+        BACKGROUND_COLOR = prev_background_color;
+    }
+}
+
 pub unsafe fn put_vga_char(byte: u8, offset: u32) {
         let vga_buffer = 0xb8000 as *mut u8;
         *vga_buffer.offset(offset as isize) = byte;
         *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | TEXT_COLOR;
 }
 
-pub fn put_vga_string(string: &[u8]) -> u32 {
+pub fn put_vga_string(string: &[u8]) {
     
     let mut offset = get_cursor();
     for &byte in string {
@@ -130,7 +222,6 @@ pub fn put_vga_string(string: &[u8]) -> u32 {
         }
     }
     set_cursor(offset);
-    offset
 }
 
 pub fn clear_vga() {
