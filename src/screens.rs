@@ -2,6 +2,9 @@ use crate::io::*;
 use crate::key_handlers::*;
 use crate::printf;
 
+#[allow(unused_imports)]
+use crate::printk;
+
 static ASCII_ART: &[u8] = b"
            +++++[>++[>+>+        ++>++++>++++>++++>++++++
           >++++++>+++++++        ++>+++++++++<<<<<<<<<-]>>

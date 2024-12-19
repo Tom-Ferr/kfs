@@ -10,9 +10,21 @@ const VGA_OFFSET_LOW: u16 = 0x0f;
 const VGA_OFFSET_HIGH: u16 = 0x0e;
 
 #[macro_export]
+#[allow(dead_code)]
 macro_rules! printf {
     ($($arg:tt)*) => {
         $crate::io::_print_fmt_str(core::format_args!($($arg)*));
+    };
+}
+#[macro_export]
+#[allow(dead_code)]
+macro_rules! printk {
+    ($level:ident, $($arg:tt)*) => {
+        $crate::io::_print_fmt_log($crate::io::LogLevel::$level, core::format_args!($($arg)*));
+    };
+    
+    ($($arg:tt)*) => {
+        $crate::io::_print_fmt_log($crate::io::LogLevel::INFO, core::format_args!($($arg)*));
     };
 }
 
@@ -177,8 +189,7 @@ pub fn _print_fmt_str(args: core::fmt::Arguments) {
     let _ = writer.write_fmt(args);
 }
 
-#[allow(dead_code)]
-pub fn printk(level: LogLevel, message: &str) {
+pub fn _print_fmt_log(level: LogLevel, args: core::fmt::Arguments) {
     let (text_color, background_color, level_prefix) = match level {
         LogLevel::INFO => (INFO_TEXT_COLOR, INFO_BG_COLOR, "\n[INFO] "),
         LogLevel::WARNING => (WARNING_TEXT_COLOR, WARNING_BG_COLOR, "\n[WARNING] "),
@@ -195,7 +206,7 @@ pub fn printk(level: LogLevel, message: &str) {
         
         put_vga_string(level_prefix.as_bytes());
         
-        put_vga_string(message.as_bytes());
+        _print_fmt_str(args);
         
         TEXT_COLOR = prev_text_color;
         BACKGROUND_COLOR = prev_background_color;
