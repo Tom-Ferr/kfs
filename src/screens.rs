@@ -36,6 +36,7 @@ const CAPS_LOCK:u8 = 0x3A;
 pub enum Screen {
     Screen1,
     Screen2,
+    Screen3,
 }
 
 impl Screen {
@@ -43,6 +44,7 @@ impl Screen {
         match self {
             Screen::Screen1 => Some(screen_1),
             Screen::Screen2 => Some(screen_2),
+            Screen::Screen3 => Some(screen_3),
         }
     }
 }
@@ -66,7 +68,7 @@ pub fn screen_1(current_screen: &Screen) -> Screen {
 
     put_vga_string(ASCII_ART);
 
-    printf!("\n\n\n\n                  Please, press \'{}\' to check bonuses", "CTRL + 2");
+    printf!("\n\n\n\n              Please, press \'CTRL + {}\' to check bonuses", "(2 or 3)");
 
 
     loop {
@@ -105,6 +107,25 @@ pub fn screen_2(current_screen: &Screen) -> Screen {
                 _ => handle_character(scan_code, SHIFT_PRESSED, &mut offset),
             }
             
+        }
+    }
+}
+
+pub fn screen_3(current_screen: &Screen) -> Screen{
+    clear_vga();
+    
+    enable_cursor(false);
+
+    printk!(INFO, "This is an example of {} log message\n", "INFO");
+    printk!(WARNING, "This is an example of {} log message\n", "WARNING");
+    printk!(ERROR, "This is an example of {} log message\n", "ERROR");
+    printk!(DEBUG, "This is an example of {} log message\n", "DEBUG");
+
+    loop {
+        let scan_code = read_key();
+        match scan_code {
+            0x1D => { if let Some(f) = handle_shortcuts(current_screen){ return f;} },
+            _ => {}
         }
     }
 }

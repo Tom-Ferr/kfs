@@ -60,6 +60,7 @@ pub fn handle_shortcuts(current_screen: & Screen) -> Option<Screen> {
         match scan_code {
             0x2 if *current_screen != Screen::Screen1 => { return Some(Screen::Screen1);},
             0x3 if *current_screen != Screen::Screen2 => { return Some(Screen::Screen2);},
+            0x4 if *current_screen != Screen::Screen3 => { return Some(Screen::Screen3);},
             0x26 if *current_screen == Screen::Screen2 => {clear_vga();}
             0x9D => break,
                 _ => {},
