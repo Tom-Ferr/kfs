@@ -61,7 +61,7 @@ pub fn render() -> ! {
     }
 }
                
-pub fn screen_1(current_screen: &Screen) -> Screen {
+fn screen_1(current_screen: &Screen) -> Screen {
     clear_vga();
     
     enable_cursor(false);
@@ -80,7 +80,7 @@ pub fn screen_1(current_screen: &Screen) -> Screen {
     }
 }
 
-pub fn screen_2(current_screen: &Screen) -> Screen {
+fn screen_2(current_screen: &Screen) -> Screen {
     enable_cursor(true);
     clear_vga();
     
@@ -111,7 +111,7 @@ pub fn screen_2(current_screen: &Screen) -> Screen {
     }
 }
 
-pub fn screen_3(current_screen: &Screen) -> Screen{
+fn screen_3(current_screen: &Screen) -> Screen{
     clear_vga();
     
     enable_cursor(false);
