@@ -346,7 +346,31 @@ pub fn scan_code_to_ascii(scan_code: u8, shift_key: u8) -> Option<u8> {
         0x09 if shift_key & 1 == 1 => Some(b'*'),
         0x0A if shift_key & 1 == 1 => Some(b'('),
         0x0B if shift_key & 1 == 1 => Some(b')'),
-        
+
+        0x0C if shift_key & 1 == 0 => Some(b'-'),
+        0x0D if shift_key & 1 == 0 => Some(b'='),
+        0x1A if shift_key & 1 == 0 => Some(b'['),
+        0x1B if shift_key & 1 == 0 => Some(b']'),
+        0x2B if shift_key & 1 == 0 => Some(b'\\'),
+        0x27 if shift_key & 1 == 0 => Some(b';'),
+        0x28 if shift_key & 1 == 0 => Some(b'\''),
+        0x29 if shift_key & 1 == 0 => Some(b'`'),
+        0x33 if shift_key & 1 == 0 => Some(b','),
+        0x34 if shift_key & 1 == 0 => Some(b'.'),
+        0x35 if shift_key & 1 == 0 => Some(b'/'),
+
+        0x0C if shift_key & 1 == 1 => Some(b'_'),
+        0x0D if shift_key & 1 == 1 => Some(b'+'),
+        0x1A if shift_key & 1 == 1 => Some(b'{'),
+        0x1B if shift_key & 1 == 1 => Some(b'}'),
+        0x2B if shift_key & 1 == 1 => Some(b'|'),
+        0x27 if shift_key & 1 == 1 => Some(b':'),
+        0x28 if shift_key & 1 == 1 => Some(b'\"'),
+        0x29 if shift_key & 1 == 1 => Some(b'~'),
+        0x33 if shift_key & 1 == 1 => Some(b'<'),
+        0x34 if shift_key & 1 == 1 => Some(b'>'),
+        0x35 if shift_key & 1 == 1 => Some(b'?'),
+
         0x39 => Some(b' '),
         
         // Ignore key releases
