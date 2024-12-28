@@ -1,5 +1,5 @@
 BOOT_DIR = bootable_base/
-BOOT_FILES = boot.s multiboot_header.s
+BOOT_FILES = boot.s multiboot_header.s gdt.s
 LINKER_FILE = ${BOOT_DIR}/linker.ld
 BOOT_SRC = $(addprefix $(BOOT_DIR), $(BOOT_FILES))
 
