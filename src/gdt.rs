@@ -32,8 +32,10 @@ struct GdtEntries{
     null_desciptor: GdtDescriptor,
     kernel_code: GdtDescriptor,
     kernel_data: GdtDescriptor,
+    kernel_stack: GdtDescriptor,
     user_code: GdtDescriptor,
     user_data: GdtDescriptor,
+    user_stack: GdtDescriptor,
 }
 
 impl GdtEntries {
@@ -42,8 +44,10 @@ impl GdtEntries {
             null_desciptor: GdtDescriptor::new(0x0, 0x0, 0x0, 0x0),
             kernel_code: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0x9A, 0xCF),
             kernel_data: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0x92, 0xCF),
+            kernel_stack: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0x96, 0xCF),
             user_code: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0xFA, 0xCF),
             user_data: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0xF2, 0xCF),
+            user_stack: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0xF6, 0xCF),
         }
     }
 }
@@ -68,8 +72,9 @@ pub fn init_gdt() {
     
     unsafe{
         let gdt_addr = 0x00000800 as *mut GdtEntries;
-        *gdt_addr = gdt_entries;
+        gdt_addr.write_volatile(gdt_entries); // safer then *gdt_addr = gdt_entries;
         let gdtr = Gdtr::new(gdt_addr);
+
         gdt_flush(&gdtr);
     }
 }
