@@ -452,7 +452,7 @@ pub fn stack_dump() {
             for entry in (0..32).step_by(2) {
                 if esp >= ebp {break}
                 if entry == 0 {
-                    printf!("{:?}: {:02x}", esp, *esp);
+                    printf!("{:?}:  {:02x}", esp, *esp);
                     offset = get_cursor();
                     PUT(*esp, offset, entry);
                 }
