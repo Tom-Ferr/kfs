@@ -122,12 +122,17 @@ pub fn color_mode(light: bool) {
 }
 
 /// Write a byte to an I/O port
-unsafe fn outb(port: u16, value: u8) {
+pub unsafe fn outb(port: u16, value: u8) {
     asm!("out dx, al", in("dx") port, in("al") value);
 }
 
+/// Write a word to an I/O port
+pub unsafe fn outw(port: u16, value: u16) {
+    asm!("out dx, ax", in("dx") port, in("ax") value);
+}
+
 /// Read a byte from an I/O port
-unsafe fn inb(port: u16) -> u8 {
+pub unsafe fn inb(port: u16) -> u8 {
     let mut value: u8;
     asm!("in al, dx", out("al") value, in("dx") port);
     value
