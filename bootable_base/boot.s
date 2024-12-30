@@ -3,7 +3,10 @@ extern kernel
 section .text
 bits 32
 start:
-    mov esp, stack_top
+    cli                 ; Disable interrupts
+    mov esp, stack_top  ; Set stack pointer to top of stack
+    and esp, 0xFFFFFFF0 ; Ensure 16-byte alignment
+    mov ebp, esp        ; Initialize base pointer
     call check_multiboot
     call kernel
     hlt
@@ -27,6 +30,7 @@ error:
     hlt
 
 section .bss
+align 16
 stack_bottom:
-    resb 4096
+    resb 4096 * 4
 stack_top:

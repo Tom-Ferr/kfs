@@ -1,6 +1,6 @@
 use crate::io::*;
 
-pub const COMMANDS: [(&[u8], fn(u32)); 11] = [
+pub const COMMANDS: [(&[u8], fn(u32)); 13] = [
     (b"dark", |_offset: u32| color_mode(false)),
     (b"light", |_offset: u32| color_mode(true)),
     (b"cyan", |offset: u32| paint(offset, Color::Cyan as u8)),
@@ -12,4 +12,6 @@ pub const COMMANDS: [(&[u8], fn(u32)); 11] = [
     (b"pink", |offset: u32| paint(offset, Color::Pink as u8)),
     (b"white", |offset: u32| paint(offset, Color::White as u8)),
     (b"brown", |offset: u32| paint(offset, Color::Brown as u8)),
+    (b"stack", |_offset: u32| stack_dump()),
+    (b"clear", |_offset: u32| clear_vga()),
 ];

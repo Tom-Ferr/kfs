@@ -1,3 +1,14 @@
+#[macro_export]
+macro_rules! get_reg {
+    ($reg:ident) => {{
+        let reg_value: u32;
+        // unsafe {
+            asm!(concat!("mov {}, ", stringify!($reg)), out(reg) reg_value);
+        // }
+        reg_value as *const u32
+    }};
+}
+
 
 pub fn buffer_count(mut offset: u32) -> u32{
     let mut count: u32 = 0;
@@ -61,13 +72,17 @@ pub fn memcpy(source: *mut u8, dest: *mut u8, nbytes: u32) {
 
 pub fn vga_strcmp(offset: u32, string: &[u8]) -> bool {
     let vga_buffer = 0xb8000 as *const u8;
-    
+    let mut size = 0;
     unsafe {
         for (i, &byte) in string.iter().enumerate() {
             let char_byte = *vga_buffer.offset((offset as usize + (i * 2)) as isize);
             if char_byte != byte {
                 return false;
             }
+            size = i;
+        }
+        if *vga_buffer.offset((offset as usize + ((size + 1) * 2)) as isize) != 0x0{
+            return false;
         }
     }
     true

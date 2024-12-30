@@ -36,16 +36,18 @@ pub fn handle_delete(offset: &mut u32) {
 
 pub fn handle_enter(offset: &mut u32) {
     let row_offset = get_row_from_offset(*offset) * 160;
+    *offset = move_offset_to_new_line(*offset);
+    set_cursor(*offset);
     for (command, action) in COMMANDS.iter(){
         if vga_strcmp(row_offset, command){
             action(row_offset);
         }
     }
-    *offset = move_offset_to_new_line(*offset);
+    *offset = get_cursor();
     if *offset >= 25 * 80 * 2 {
         *offset = scroll_ln(*offset);
+        set_cursor(*offset);
     }
-    set_cursor(*offset);
 }
 
 pub fn handle_character(scan_code: u8, shift_pressed: u8, offset: &mut u32) {

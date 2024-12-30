@@ -2,6 +2,7 @@ use core::arch::asm;
 use core::fmt;
 
 use crate::utils;
+use crate::get_reg;
 
 /// VGA Ports
 const VGA_INDEX_PORT: u16 = 0x3D4;
@@ -412,4 +413,81 @@ pub fn scroll_ln(offset: u32) -> u32 {
         }
     }
     offset - 2 * 80
+}
+
+pub fn stack_dump() {
+    clear_vga();
+    set_cursor(0);
+    enable_cursor(false);
+    unsafe {
+        
+        let stack_base = get_reg!(ebp);
+        let stack_pointer = get_reg!(esp);
+
+        let mut esp = stack_pointer as *const u8;
+
+        let ebp = stack_base as *const u8;
+
+        let mut offset = 0;
+        let mut entry = 0;
+
+        while esp <= ebp {
+            while entry < 32 && esp <= ebp {
+
+                if entry == 0 {
+                    printf!("{:?}: {:02x}", esp, *esp);
+                    offset = get_cursor();
+                    if *esp > 32 as u8 && *esp < 127 {
+                        put_vga_char(*esp, offset + (((15 * 3) + 4) * 2) + entry);
+                        
+                    }
+                    else {
+                        put_vga_char('.' as u8, offset + (((15 * 3) + 4) * 2) + entry);
+                    }
+                }
+                else {
+                    printf!(" {:02x}", *esp);
+                    if *esp > 32 as u8 && *esp < 127 {
+                        put_vga_char(*esp, offset + (((15 * 3) + 4) * 2) + entry);
+                        
+                    }
+                    else {
+                        put_vga_char('.' as u8, offset + (((15 * 3) + 4) * 2) + entry);
+                    }
+                }
+                entry += 2;
+                esp = esp.wrapping_add(1);
+            }
+            printf!("\n");
+            if get_row_from_offset(get_cursor()) == 24 {
+                printf!("Press \'ENTER\' to continue, \'ESC\' to quit");
+                loop{
+                    let scan_code = read_key();
+                    if scan_code == 0x01{
+                        clear_vga();
+                        set_cursor(0);
+                        enable_cursor(true);
+                        return ;
+                    }
+                    else if scan_code == 0x1C{
+                        clear_vga();
+                        set_cursor(0);
+                        break ;
+                    }
+                }
+            }
+            entry = 0;
+        }
+        printf!("Press \'ENTER\' to quit");
+        loop{
+            let scan_code = read_key();
+            if scan_code == 0x1C{
+                clear_vga();
+                set_cursor(0);
+                enable_cursor(true);
+                break ;
+            }
+        }
+    }
+
 }
