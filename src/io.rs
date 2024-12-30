@@ -424,8 +424,8 @@ pub fn stack_dump() {
     clear_vga();
     set_cursor(0);
     enable_cursor(false);
+    
     unsafe {
-        
         let stack_base = get_reg!(ebp);
         let stack_pointer = get_reg!(esp);
 
@@ -434,37 +434,36 @@ pub fn stack_dump() {
         let ebp = stack_base as *const u8;
 
         let mut offset = 0;
-        let mut entry = 0;
 
-        while esp <= ebp {
-            while entry < 32 && esp <= ebp {
+        const PUT: fn(u8, u32, u32) = |value: u8, offset: u32, entry: u32| {
+            unsafe{
 
+                if value > 32 as u8 && value < 127 {
+                    put_vga_char(value, offset + (((15 * 3) + 4) * 2) + entry);
+                    
+                }
+                else {
+                    put_vga_char('.' as u8, offset + (((15 * 3) + 4) * 2) + entry);
+                }
+            }
+        };
+
+        while esp < ebp {
+            for entry in (0..32).step_by(2) {
+                if esp >= ebp {break}
                 if entry == 0 {
                     printf!("{:?}: {:02x}", esp, *esp);
                     offset = get_cursor();
-                    if *esp > 32 as u8 && *esp < 127 {
-                        put_vga_char(*esp, offset + (((15 * 3) + 4) * 2) + entry);
-                        
-                    }
-                    else {
-                        put_vga_char('.' as u8, offset + (((15 * 3) + 4) * 2) + entry);
-                    }
+                    PUT(*esp, offset, entry);
                 }
                 else {
                     printf!(" {:02x}", *esp);
-                    if *esp > 32 as u8 && *esp < 127 {
-                        put_vga_char(*esp, offset + (((15 * 3) + 4) * 2) + entry);
-                        
-                    }
-                    else {
-                        put_vga_char('.' as u8, offset + (((15 * 3) + 4) * 2) + entry);
-                    }
+                    PUT(*esp, offset, entry);
                 }
-                entry += 2;
                 esp = esp.wrapping_add(1);
             }
             printf!("\n");
-            if get_row_from_offset(get_cursor()) == 24 {
+            if get_cursor() == 24 * 160 {
                 printf!("Press \'ENTER\' to continue, \'ESC\' to quit");
                 loop{
                     let scan_code = read_key();
@@ -481,7 +480,6 @@ pub fn stack_dump() {
                     }
                 }
             }
-            entry = 0;
         }
         printf!("Press \'ENTER\' to quit");
         loop{
