@@ -421,17 +421,26 @@ pub fn scroll_ln(offset: u32) -> u32 {
 }
 
 pub fn stack_dump() {
-    clear_vga();
-    set_cursor(0);
-    enable_cursor(false);
     
     unsafe {
         let stack_base = get_reg!(ebp);
         let stack_pointer = get_reg!(esp);
 
-        let mut esp = stack_pointer as *const u8;
+        memory_dump(stack_pointer, stack_base);
+    }
 
-        let ebp = stack_base as *const u8;
+}
+
+pub fn memory_dump(begin_pointer: *const u32, end_pointer: *const u32) {
+    clear_vga();
+    set_cursor(0);
+    enable_cursor(false);
+    
+    unsafe {
+
+        let mut iter = begin_pointer as *const u8;
+
+        let end = end_pointer as *const u8;
 
         let mut offset = 0;
 
@@ -448,19 +457,19 @@ pub fn stack_dump() {
             }
         };
 
-        while esp < ebp {
+        while iter < end {
             for entry in (0..32).step_by(2) {
-                if esp >= ebp {break}
+                if iter >= end {break}
                 if entry == 0 {
-                    printf!("{:?}:  {:02x}", esp, *esp);
+                    printf!("{:?}:  {:02x}", iter, *iter);
                     offset = get_cursor();
-                    PUT(*esp, offset, entry);
+                    PUT(*iter, offset, entry);
                 }
                 else {
-                    printf!(" {:02x}", *esp);
-                    PUT(*esp, offset, entry);
+                    printf!(" {:02x}", *iter);
+                    PUT(*iter, offset, entry);
                 }
-                esp = esp.wrapping_add(1);
+                iter = iter.wrapping_add(1);
             }
             printf!("\n");
             if get_cursor() == 24 * 160 {

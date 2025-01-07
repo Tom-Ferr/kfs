@@ -3,7 +3,7 @@ macro_rules! get_reg {
     ($reg:ident) => {{
         let reg_value: u32;
         // unsafe {
-            asm!(concat!("mov {}, ", stringify!($reg)), out(reg) reg_value);
+            core::arch::asm!(concat!("mov {}, ", stringify!($reg)), out(reg) reg_value);
         // }
         reg_value as *const u32
     }};
