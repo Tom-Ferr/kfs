@@ -10,6 +10,8 @@ const VGA_DATA_PORT: u16 = 0x3D5;
 const VGA_OFFSET_LOW: u16 = 0x0f;
 const VGA_OFFSET_HIGH: u16 = 0x0e;
 
+pub const VGA_BUFFER: u32 = 0xC03FF000;
+
 #[macro_export]
 #[allow(dead_code)]
 macro_rules! printf {
@@ -86,7 +88,7 @@ static mut BACKGROUND_COLOR: u8 = Color::Black as u8;
 
 pub fn paint(mut offset: u32, color: u8) {
     unsafe{
-        let vga_buffer = 0xb8000 as *mut u8;
+        let vga_buffer = VGA_BUFFER as *mut u8;
         let count = utils::buffer_count(offset);
         for _ in 0..count{
             *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | color;
@@ -106,7 +108,7 @@ pub fn color_mode(light: bool) {
             TEXT_COLOR = Color::LightCyan as u8;
             BACKGROUND_COLOR = Color::DarkGray as u8;
         }
-        let vga_buffer = 0xb8000 as *mut u8;
+        let vga_buffer = VGA_BUFFER as *mut u8;
         let mut offset: u32 = 0;
         for _ in 0..(25 * 80) {
             let current: u8 = *vga_buffer.offset(offset as isize + 1) & 0b1111;
@@ -220,7 +222,7 @@ pub fn _print_fmt_log(level: LogLevel, args: core::fmt::Arguments) {
 }
 
 pub unsafe fn put_vga_char(byte: u8, offset: u32) {
-        let vga_buffer = 0xb8000 as *mut u8;
+        let vga_buffer = VGA_BUFFER as *mut u8;
         *vga_buffer.offset(offset as isize) = byte;
         *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | TEXT_COLOR;
 }
@@ -409,7 +411,7 @@ pub fn move_offset_to_new_line(offset: u32) -> u32 {
 }
 
 pub fn scroll_ln(offset: u32) -> u32 {
-    let vga_buffer = 0xb8000 as *mut u8;
+    let vga_buffer = VGA_BUFFER as *mut u8;
     unsafe{
         utils::memcpy(vga_buffer.offset(get_offset(0, 1) as isize), vga_buffer.offset(get_offset(0, 0) as isize), 80 * (25 - 1) * 2);
         

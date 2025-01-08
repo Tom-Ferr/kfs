@@ -1,15 +1,22 @@
 global start
 extern kernel
+extern enable_paging
+
+section .bss
+
+align 4096
+directory_table:
+    resb 4096
+page_table:
+    resb 4096
+
+align 16
+stack_bottom:
+    resb 4096 * 4
+stack_top:
+
 section .text
 bits 32
-start:
-    cli                 ; Disable interrupts
-    mov esp, stack_top  ; Set stack pointer to top of stack
-    and esp, 0xFFFFFFF0 ; Ensure 16-byte alignment
-    mov ebp, esp        ; Initialize base pointer
-    call check_multiboot
-    call kernel
-    hlt
 
 check_multiboot:
     ; check the bootloader wrote its magic value in eax before loading our kernel
@@ -29,8 +36,53 @@ error:
     mov byte  [0xb800a], al
     hlt
 
-section .bss
-align 16
-stack_bottom:
-    resb 4096 * 4
-stack_top:
+init_table:
+    xor eax, eax
+    or eax, 3
+    mov ecx, 1023
+    mov edi, page_table - 0xC0000000
+.map_pages:
+    stosd                ; Store the value in EAX at the address pointed by EDI
+    add eax, 0x1000      ; Increment EAX by 4 KB (next physical page)
+    loop .map_pages      ; Decrement ECX, and repeat until ECX = 0
+    mov eax, 0xB8000
+    or eax, 3
+    mov edi, page_table - 0xC0000000
+    mov [edi + 4092], eax
+    call .setup_directory
+    ret
+
+.setup_directory:
+    mov eax, page_table - 0xC0000000
+    or eax, 3
+    mov edi, directory_table - 0xC0000000
+    mov [edi], eax
+    mov [edi + 0xC00], eax
+    ret
+
+start:
+    call check_multiboot
+    call init_table
+
+    mov eax, directory_table - 0xC0000000
+    
+    mov cr3, eax        ; update cr3
+    mov eax, cr0        ; read current cr0
+    or  eax, 0x80000001 ; set Paging and Protected Mode
+    mov cr0, eax        ; update cr0
+
+    lea ecx, [rel higher_half]
+    jmp ecx
+
+section .kernel_text
+higher_half:
+    xor eax, eax
+    mov [directory_table], eax
+    mov ecx, cr3
+    mov cr3, ecx
+    cli                 ; Disable interrupts
+    mov esp, stack_top  ; Set stack pointer to top of stack
+    and esp, 0xFFFFFFF0 ; Ensure 16-byte alignment
+    mov ebp, esp        ; Initialize base pointer
+    call kernel
+    hlt

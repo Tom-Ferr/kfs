@@ -1,6 +1,6 @@
 
 extern "C" {
-    fn enable_paging(dir_ptr: *const PageTable);
+    fn enable_paging(dir_ptr: *const PageDirectory);
 }
 
 #[repr(C, align(4096))]
@@ -40,10 +40,10 @@ impl PageTable {
     }
 
     fn fill(&mut self, start_addr: u32){
-        let mut addr = start_addr as *const u32;
+        let mut addr = start_addr;
         for i in 0..1024 {
-            self.tables.data[i] = addr as u32 | 0x3;
-            addr = addr.wrapping_add(1024);
+            self.tables.data[i] = addr | 0x3;
+            addr += 4096;
         }
         self.size = 1024;
     }

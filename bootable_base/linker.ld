@@ -3,14 +3,39 @@ ENTRY(start)
 SECTIONS {
     . = 1M;
 
-    .boot :
+    .text ALIGN (0x1000) :
     {
-        /* ensure that the multiboot header is at the beginning */
         *(.multiboot_header)
-    }
-
-    .text :
-    {
         *(.text)
     }
+
+    . += 0xC0000000;
+
+    .kernel_text ALIGN (0x1000) : AT(ADDR(.kernel_text)-0xC0000000)
+    {
+        *(.kernel_text)
+        *(.text.*)
+        *(.gdt)
+    }
+    
+    .bss ALIGN (0x1000) : AT(ADDR(.bss)-0xC0000000)
+    {
+        *(.bss)
+    }
+
+    .kernel_rodata ALIGN (0x1000) : AT(ADDR(.kernel_rodata)-0xC0000000)
+    {
+        *(.rodata.*)
+    }
+
+    .kernel_data ALIGN (0x1000) : AT(ADDR(.kernel_data)-0xC0000000)
+    {
+        *(.data.*)
+    }
+
+    .kernel_bss ALIGN (0x1000) : AT(ADDR(.kernel_bss)-0xC0000000)
+    {
+        *(.bss.*)
+    }
+
 }

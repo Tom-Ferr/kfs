@@ -12,7 +12,7 @@ macro_rules! get_reg {
 
 pub fn buffer_count(mut offset: u32) -> u32{
     let mut count: u32 = 0;
-    let vga_buffer = 0xb8000 as *mut u8;
+    let vga_buffer = crate::io::VGA_BUFFER as *mut u8;
 
     unsafe{
 
@@ -25,7 +25,7 @@ pub fn buffer_count(mut offset: u32) -> u32{
 }
 
 pub fn move_buffer_left(mut offset: u32){
-    let vga_buffer = 0xb8000 as *mut u8;
+    let vga_buffer = crate::io::VGA_BUFFER as *mut u8;
 
     
     let mut count = buffer_count(offset);
@@ -42,7 +42,7 @@ pub fn move_buffer_left(mut offset: u32){
 }
 
 pub fn move_buffer_right(mut offset: u32){
-    let vga_buffer = 0xb8000 as *mut u8;
+    let vga_buffer = crate::io::VGA_BUFFER as *mut u8;
 
     
     let mut count = buffer_count(offset) + 1;
@@ -71,7 +71,7 @@ pub fn memcpy(source: *mut u8, dest: *mut u8, nbytes: u32) {
 }
 
 pub fn vga_strcmp(offset: u32, string: &[u8]) -> bool {
-    let vga_buffer = 0xb8000 as *const u8;
+    let vga_buffer = crate::io::VGA_BUFFER as *const u8;
     let mut size = 0;
     unsafe {
         for (i, &byte) in string.iter().enumerate() {

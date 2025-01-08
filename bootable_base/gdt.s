@@ -1,3 +1,4 @@
+section .gdt
 global gdt_flush
 
 gdt_flush:

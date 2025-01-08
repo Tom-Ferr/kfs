@@ -72,7 +72,7 @@ endif
 ${LIB}: ${RUST_SRC} Cargo.toml .cargo/config.toml
 	${RUST_PATH}cargo build
 
-${NAME}: ${OBJS} ${LIB}
+${NAME}: ${LINKER_FILE} ${OBJS} ${LIB}
 	ld -m elf_i386 -n -o ${NAME} -T ${LINKER_FILE} ${OBJS} ${LIB}
 
 ${GRUB}: ${NAME}

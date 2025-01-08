@@ -1,5 +1,7 @@
 use core::mem::size_of;
 
+const GDT_ADDR: u32 = 0xC0000800;
+
 extern "C" {
     fn gdt_flush(gdt_ptr: *const Gdtr);
 }
@@ -71,7 +73,7 @@ pub fn init_gdt() {
     let gdt_entries = GdtEntries::new();
     
     unsafe{
-        let gdt_addr = 0x00000800 as *mut GdtEntries;
+        let gdt_addr = GDT_ADDR as *mut GdtEntries;
         gdt_addr.write_volatile(gdt_entries); // safer then *gdt_addr = gdt_entries;
         let gdtr = Gdtr::new(gdt_addr);
 
