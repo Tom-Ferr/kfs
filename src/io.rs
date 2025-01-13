@@ -10,7 +10,7 @@ const VGA_DATA_PORT: u16 = 0x3D5;
 const VGA_OFFSET_LOW: u16 = 0x0f;
 const VGA_OFFSET_HIGH: u16 = 0x0e;
 
-pub const VGA_BUFFER: u32 = 0xC03FF000;
+pub const VGA_BUFFER: u32 = 0xC00B8000;
 
 #[macro_export]
 #[allow(dead_code)]

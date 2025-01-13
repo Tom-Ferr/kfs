@@ -2,34 +2,19 @@ global start
 extern kernel
 extern enable_paging
 
-section .bss
-
-align 4096
-directory_table:
-    resb 4096
-page_table:
-    resb 4096
-
-align 16
-stack_bottom:
-    resb 4096 * 4
-stack_top:
 
 section .text
 bits 32
-
 check_multiboot:
     ; check the bootloader wrote its magic value in eax before loading our kernel
     cmp eax, 0x36d76289
     jne .no_multiboot
     ret
-
 .no_multiboot:
     ; ERR:  0, our kernel wasn't launched by a multiboot compliant bootloader (shouldn't happen with GRUB)
     mov al, "0"
-    jmp error
-
-error:
+    jmp .error
+.error:
     mov dword [0xb8000], 0x4f524f45
     mov dword [0xb8004], 0x4f3a4f52
     mov dword [0xb8008], 0x4f204f20
@@ -39,19 +24,20 @@ error:
 init_table:
     xor eax, eax
     or eax, 3
-    mov ecx, 1023
+    mov ecx, 1024
     mov edi, page_table - 0xC0000000
 .map_pages:
     stosd                ; Store the value in EAX at the address pointed by EDI
     add eax, 0x1000      ; Increment EAX by 4 KB (next physical page)
     loop .map_pages      ; Decrement ECX, and repeat until ECX = 0
-    mov eax, 0xB8000
-    or eax, 3
-    mov edi, page_table - 0xC0000000
-    mov [edi + 4092], eax
-    call .setup_directory
-    ret
-
+   ; mov eax, 0xB8000
+   ; or eax, 3
+   ; mov edi, page_table - 0xC0000000
+   ; mov [edi + 4088], eax
+   ; xor eax, eax
+   ; or eax, 3
+   ; mov [edi + 4092], eax
+    jmp .setup_directory
 .setup_directory:
     mov eax, page_table - 0xC0000000
     or eax, 3
@@ -65,7 +51,7 @@ start:
     call init_table
 
     mov eax, directory_table - 0xC0000000
-    
+.enable_paging:    
     mov cr3, eax        ; update cr3
     mov eax, cr0        ; read current cr0
     or  eax, 0x80000001 ; set Paging and Protected Mode
@@ -73,6 +59,7 @@ start:
 
     lea ecx, [rel higher_half]
     jmp ecx
+
 
 section .kernel_text
 higher_half:
@@ -84,5 +71,19 @@ higher_half:
     mov esp, stack_top  ; Set stack pointer to top of stack
     and esp, 0xFFFFFFF0 ; Ensure 16-byte alignment
     mov ebp, esp        ; Initialize base pointer
+    push ebx
     call kernel
     hlt
+
+
+section .bss
+align 4096
+directory_table:
+    resb 4096
+page_table:
+    resb 4096
+
+align 16
+stack_bottom:
+    resb 4096 * 20
+stack_top:
