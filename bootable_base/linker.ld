@@ -11,6 +11,8 @@ SECTIONS {
 
     . += 0xC0000000;
 
+    kernel_start = .;
+
     .kernel_text ALIGN (0x1000) : AT(ADDR(.kernel_text)-0xC0000000)
     {
         *(.kernel_text)
@@ -37,5 +39,7 @@ SECTIONS {
     {
         *(.bss.*)
     }
+
+    kernel_end = .;
 
 }

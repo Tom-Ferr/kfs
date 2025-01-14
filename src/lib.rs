@@ -10,74 +10,83 @@ mod commands;
 mod screens;
 mod gdt;
 mod paging;
+mod multiboot;
 
 use screens::render;
 use gdt::init_gdt;
 use paging::init_page_tables;
+use multiboot::read_multiboot_info;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     loop {}
 }
 
+extern "C" {
+    static kernel_start: u32;
+    static kernel_end: u32;
+}
+
 #[no_mangle]
-pub extern "C" fn kernel() -> ! {
-
-    init_gdt();
-
-    // init_page_tables();
-
-    render();
+pub extern "C" fn kernel(multiboot_info: u32) -> ! {
 
     unsafe{
 
-        // let dir = (crate::get_reg!(cr3) as u32 + 0xC0000000) as *const u32;
+        let ks = &kernel_start as *const u32 as usize;
+        let ke = &kernel_end as *const u32 as usize;
 
-        // let virtual_mem: u32 = 0xC0000800;
+        crate::printf!("kernel start = 0x{:x}\n", ks);
+        crate::printf!("kernel end = 0x{:x}\n", ke);
+    }
 
-        // let offset = virtual_mem & 0xfff;
+    read_multiboot_info(multiboot_info + 0xC0000000);
 
-        // let ti = (virtual_mem >> 12) & 0x3ff;
+    // init_gdt();
 
-        // let di = (virtual_mem >> 22) & 0x3ff;
+    // init_page_tables();
+
+    // render();
+
+    // unsafe{
+        
+    //     let dir = crate::paging::DIR.as_mut().unwrap();
+
+    //     let virtual_mem: usize = 0xC03FF000;
+
+    //     let offset: usize = virtual_mem & 0xfff;
+
+    //     let ti: usize = (virtual_mem >> 12) & 0x3ff;
+
+    //     let di: usize = (virtual_mem >> 22) & 0x3ff;
 
         
         // io::memory_dump(dir, dir.wrapping_add(1024));
 
-        // crate::printk!(DEBUG, "offset = {:?}\n", offset);
-        // crate::printk!(DEBUG, "table index = {:?}\n", ti);
-        // crate::printk!(DEBUG, "directory index = {:?}\n", di);
+    //     crate::printk!(DEBUG, "offset = {:?}\n", offset);
+    //     crate::printk!(DEBUG, "table index = {:?}\n", ti);
+    //     crate::printk!(DEBUG, "directory index = {:?}\n", di);
 
-        // crate::printk!(DEBUG, "directory addr = {:?}\n", dir);
-        // crate::printk!(DEBUG, "directory addr = {:x}\n", dir as u32);
+    //     if let Ok(..) = dir.new_page(){
+    //         let entry = (*dir.directory).data[769] as *const u32;
+    //         crate::printk!(DEBUG, "Directory Table 769th entry = {:?}\n", entry);
 
-        // let entry = dir.wrapping_add(di as usize) as *const u32;
-        // crate::printk!(DEBUG, "Directory Table 768th entry = {:?}\n", entry);
+    //         let filtered = (entry as u32 & 0xfffff000) as *const u32;
+    //         crate::printk!(DEBUG, "Filtered Directory Table 769th entry = {:?}\n", filtered);
 
-        // let filtered = (entry as u32 & 0xfffff000) as *const u32;
-        // crate::printk!(DEBUG, "Directory Table 768th entry = {:?}\n", filtered);
+    //         let tab = *((filtered as u32) as *const u32);
+    //         crate::printk!(DEBUG, "Page Table 1st entry = 0x{:x}\n", tab);
 
-        // let tab = *filtered as u32;
-        // crate::printk!(DEBUG, "Page Table 1st entry = {:?}\n", tab);
+    //         let target = *((filtered.wrapping_add(1023) as u32) as *const u32);
+    //         crate::printk!(DEBUG, "Page Table {}th entry = 0x{:x}\n", 1023, target);
 
-        // let target = *filtered.wrapping_add(ti as usize);
-        // crate::printk!(DEBUG, "Page Table 256th entry = 0x{:x}\n", target);
+    //         crate::printk!(DEBUG, "Dir Size {}\n", dir.size);
+    //     }
+    //     else{
+    //         crate::printk!(DEBUG, "Error\n");
+    //     }
 
-        
-        
-        
-        
-        
-        // crate::printk!(DEBUG, "Page Table Address = {:?}\n", &paging::TABLE.tables.data as *const [u32; 1024]);
 
-        // crate::printk!(DEBUG, "Page Directory First Entry = {:x}\n", paging::DIR.tables.data[0]);
-
-        // crate::printk!(DEBUG, "Page Directory First Entry (Filtered) = {:x}\n", (paging::DIR.tables.data[0] & 0xfffff000));
-
-        // crate::printk!(DEBUG, "Value of Filtred Address = {:x}\n", *((paging::DIR.tables.data[0] & 0x3ff000) as *const u32));
-
-        // crate::printk!(DEBUG, "Page Table First Entry = {:x}\n", paging::TABLE.tables.data[0]);
-    }
+    // }
     loop{}
     
 }
