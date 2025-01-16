@@ -1,4 +1,5 @@
 use crate::printf;
+use crate::allocator::block_pages;
 
 const MULTIBOOT_TAG_ALIGN                 :u32 =   8; 
 const MULTIBOOT_TAG_TYPE_END              :u32 =   0; 
@@ -114,4 +115,36 @@ pub fn read_multiboot_info(addr: u32) {
   crate::printf!("multiboot start = 0x{:x}\n", addr);
   crate::printf!("multiboot end = 0x{:x}\n", tag);
   printf!("Total mbi size {}\n", tag - addr);
+}
+
+pub fn apply_mmap_info(addr: u32) -> Result<(),()>{
+  let mut tag = addr + 8;
+  loop {
+    let current_tag = unsafe { &*(tag as *const MultiBootTag) };
+    if current_tag.tag_type == MULTIBOOT_TAG_TYPE_END {
+      break;
+    }
+
+    match current_tag.tag_type {
+      MULTIBOOT_TAG_TYPE_MMAP => {
+        unsafe {
+          let mmap_tag = &*(tag as *const MultiBootTagMmap);
+          let mut mmap = &mmap_tag.entries as *const MultiBootMmapEntry;
+          let end = tag + current_tag.size;
+          
+          let mut i = 0;
+          while (mmap as u32) < end{
+            if (*mmap).mem_type == MULTIBOOT_MEMORY_RESERVED && (*mmap).addr_low < 0x100000{
+              block_pages((*mmap).addr_low, (*mmap).len_low );
+            }
+            mmap = (mmap as u32 + mmap_tag.entry_size) as *const MultiBootMmapEntry;
+          }
+        }
+        return Ok(());
+      }
+      _ => {}
+    }
+    tag += ((current_tag.size + 7) & !7);
+  }
+  Err(())
 }
