@@ -11,16 +11,18 @@ mod screens;
 mod gdt;
 mod paging;
 mod multiboot;
-mod allocator;
+mod malloc;
 
 use screens::render;
 use gdt::init_gdt;
 use paging::init_page_tables;
 use multiboot::apply_mmap_info;
-use allocator::block_pages;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
+    if let Some(location) = _info.location() {
+        printk!(ERROR, "{}", location);
+    }
     loop {}
 }
 
@@ -35,12 +37,11 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
     init_gdt();
 
     unsafe{
-        let ke = &kernel_end as *const u32 as u32;
+        let ks = &kernel_start as *const u32 as u32;
+        let ke = &kernel_end as *const u32 as u32 - 0xC0000000;
         
         init_page_tables();
-        
-        apply_mmap_info(multiboot_info + 0xC0000000);
-        crate::allocator::block_pages(0x100000, (ke - 0xC0000000) - 0x100000);
+        apply_mmap_info(multiboot_info + 0xC0000000, ks, ke);
     }
     
     // render();

@@ -1,5 +1,6 @@
 use crate::printf;
-use crate::allocator::block_pages;
+use crate::paging::block_pages;
+use crate::malloc::init_freelist;
 
 const MULTIBOOT_TAG_ALIGN                 :u32 =   8; 
 const MULTIBOOT_TAG_TYPE_END              :u32 =   0; 
@@ -117,7 +118,7 @@ pub fn read_multiboot_info(addr: u32) {
   printf!("Total mbi size {}\n", tag - addr);
 }
 
-pub fn apply_mmap_info(addr: u32) -> Result<(),()>{
+pub fn apply_mmap_info(addr: u32, kernel_start: u32, kernel_end: u32) -> Result<(),()>{
   let mut tag = addr + 8;
   loop {
     let current_tag = unsafe { &*(tag as *const MultiBootTag) };
@@ -128,14 +129,16 @@ pub fn apply_mmap_info(addr: u32) -> Result<(),()>{
     match current_tag.tag_type {
       MULTIBOOT_TAG_TYPE_MMAP => {
         unsafe {
+          let kernel_length = kernel_end - kernel_start;
           let mmap_tag = &*(tag as *const MultiBootTagMmap);
           let mut mmap = &mmap_tag.entries as *const MultiBootMmapEntry;
           let end = tag + current_tag.size;
           
           let mut i = 0;
           while (mmap as u32) < end{
-            if (*mmap).mem_type == MULTIBOOT_MEMORY_RESERVED && (*mmap).addr_low < 0x100000{
-              block_pages((*mmap).addr_low, (*mmap).len_low );
+            if (*mmap).mem_type == MULTIBOOT_MEMORY_AVAILABLE && (*mmap).addr_low >= kernel_start{
+              block_pages(0x0, kernel_end);
+              init_freelist(kernel_end + 0xC0000000, (*mmap).len_low - kernel_length);
             }
             mmap = (mmap as u32 + mmap_tag.entry_size) as *const MultiBootMmapEntry;
           }
