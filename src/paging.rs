@@ -1,13 +1,21 @@
 use crate::io::*;
 
+pub static mut DIR: Option<PageDirectory> = None;
+// pub static mut bitmap: [[u32; 32]; 1024] = [[0; 32]; 1024];
+
+pub const FRAME_SIZE: u32 = 0x1000;
+pub const TOTAL_MEMORY: u32 = FRAME_SIZE * 1024;
+pub const NUMBER_OF_FRAMES: u32 = TOTAL_MEMORY / FRAME_SIZE;
+
 #[derive(Copy, Clone, PartialEq)]
-enum UserSpace{
+pub enum UserSpace{
+    Virtual = 0x8c,
     Kernel = 0x300,
     User = 0x0,
 }
 
 #[repr(C, align(4096))]
-pub struct AlignedPage {
+struct AlignedPage {
     data: [u32; 1024],
 }
 
@@ -92,6 +100,7 @@ pub struct PageDirectory {
     directory: *mut AlignedPage,
     whoami: UserSpace,
     allocs: usize,
+    virtual_allocs: usize,
 }
 
 impl PageDirectory {
@@ -100,6 +109,7 @@ impl PageDirectory {
             directory: &mut AlignedPage::new() as *mut AlignedPage,
             whoami: user,
             allocs: 0,
+            virtual_allocs: 0,
         }
     }
 
@@ -113,6 +123,7 @@ impl PageDirectory {
             directory: aligned_page,
             whoami: UserSpace::Kernel,
             allocs: 0,
+            virtual_allocs: 0,
         }
     }
 
@@ -127,6 +138,10 @@ impl PageDirectory {
         self.allocs
     }
 
+    pub fn get_virtual_allocs(&self) -> usize{
+        self.virtual_allocs
+    }
+
     pub fn get_whoami(&self) -> usize{
         self.whoami as usize
     }
@@ -137,9 +152,25 @@ impl PageDirectory {
         }
     }
 
+    pub fn increment_allocs(&mut self){
+        self.allocs += 1;
+    }
+
+    pub fn decrement_allocs(&mut self){
+        self.allocs -= 1;
+    }
+
+    pub fn increment_virtual_allocs(&mut self){
+        self.virtual_allocs += 1;
+    }
+
+    pub fn decrement_virtual_allocs(&mut self){
+        self.virtual_allocs -= 1;
+    }
+
     pub fn new_page(&mut self) -> Result<(),()>{
         
-        if self.allocs >= 1024{
+        if self.allocs >= 140{
             return Err(());
         }
         
@@ -161,14 +192,13 @@ impl PageDirectory {
     }
 }
 
-pub static mut DIR: Option<PageDirectory> = None;
-// pub static mut bitmap: [[u32; 32]; 1024] = [[0; 32]; 1024];
-
-const FRAME_SIZE: u32 = 0x1000;
-const TOTAL_MEMORY: u32 = FRAME_SIZE * 1024;
-const NUMBER_OF_FRAMES: u32 = TOTAL_MEMORY / FRAME_SIZE;
-
-pub fn alloc_page() -> Option<u32> {
+pub fn alloc_page(nbytes: usize) -> Option<u32> {
+    let mut npages = nbytes as u32 / FRAME_SIZE;
+    if nbytes as u32 % FRAME_SIZE != 0{
+        npages += 1;
+    }
+    let limit = 32 - npages;
+    let cursor = !0 >> limit;
     unsafe{
         let dir = DIR.as_mut().unwrap();
 
@@ -178,15 +208,21 @@ pub fn alloc_page() -> Option<u32> {
             for i in 0..1024 {
                 let byteIndex: usize = i / 32;
                 let bitIndex: usize = i % 32;
+
+                if bitIndex > limit as usize{
+                    continue;
+                }
                 
-                if (tab.bitmap[byteIndex] & (1 << bitIndex)) == 0 {
-                    tab.bitmap[byteIndex] |= 1 << bitIndex;
+                let target = cursor << bitIndex;
+                if (tab.bitmap[byteIndex] & target) == 0 {
+                    tab.bitmap[byteIndex] |= target;
                     return Some(tab.get_frame(i));
                 }
             }
         }
         if let Ok(..) = dir.new_page() {
-            let tab = &*(dir.get_page(dir.get_allocs()) as *const PageTable);
+            let tab = &mut *(dir.get_page(dir.get_allocs()) as *mut PageTable);
+            tab.bitmap[dir.get_allocs()] |= cursor;
             return Some(tab.get_frame(0));
         }
     }

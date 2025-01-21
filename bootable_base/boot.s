@@ -44,6 +44,9 @@ init_table:
     mov edi, directory_table - 0xC0000000
     mov [edi], eax
     mov [edi + 0xC00], eax
+    mov eax, virtual_space - 0xC0000000
+    or eax, 3
+    mov [edi + 0xE30], eax
     ret
 
 start:
@@ -81,6 +84,8 @@ align 4096
 directory_table:
     resb 4096
 page_table:
+    resb 8192
+virtual_space:
     resb 8192
 
 align 16
