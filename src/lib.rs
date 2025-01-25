@@ -41,19 +41,10 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
         let ke = &kernel_end as *const u32 as u32 - 0xC0000000;
         
         init_page_tables();
-        apply_mmap_info(multiboot_info + 0xC0000000, ks, ke);
+        if let Err(..) = apply_mmap_info(multiboot_info + 0xC0000000, ks, ke){
+            panic!();
+        }
     }
     
-    // render();
-
-    unsafe{
-        
-        let dir = crate::paging::DIR.as_mut().unwrap();
-
-        let tab = &*(dir.get_page(0) as *const crate::paging::PageTable);
-        tab.print_bitmap();
-
-    }
-    loop{}
-    
+    render();    
 }

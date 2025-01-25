@@ -1,36 +1,88 @@
 use crate::printf;
 use crate::paging::block_pages;
 use crate::malloc::init_freelist;
+#[allow(dead_code)]
+const MULTIBOOT_TAG_ALIGN                 :u32 =   8;
 
-const MULTIBOOT_TAG_ALIGN                 :u32 =   8; 
-const MULTIBOOT_TAG_TYPE_END              :u32 =   0; 
-const MULTIBOOT_TAG_TYPE_CMDLINE          :u32 =   1; 
+#[allow(dead_code)]
+const MULTIBOOT_TAG_TYPE_END              :u32 =   0;
+
+#[allow(dead_code)]
+const MULTIBOOT_TAG_TYPE_CMDLINE          :u32 =   1;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_BOOT_LOADER_NAME :u32 =   2; 
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_MODULE           :u32 =   3; 
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_BASIC_MEMINFO    :u32 =   4; 
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_BOOTDEV          :u32 =   5; 
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_MMAP             :u32 =   6; 
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_VBE              :u32 =   7; 
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_FRAMEBUFFER      :u32 =   8; 
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_ELF_SECTIONS     :u32 =   9; 
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_APM              :u32 =   10;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_EFI32            :u32 =   11;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_EFI64            :u32 =   12;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_SMBIOS           :u32 =   13;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_ACPI_OLD         :u32 =   14;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_ACPI_NEW         :u32 =   15;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_NETWORK          :u32 =   16;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_EFI_MMAP         :u32 =   17;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_EFI_BS           :u32 =   18;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_EFI32_IH         :u32 =   19;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_EFI64_IH         :u32 =   20;
+
+#[allow(dead_code)]
 const MULTIBOOT_TAG_TYPE_LOAD_BASE_ADDR   :u32 =   21;
 
-
+#[allow(dead_code)]
 const MULTIBOOT_MEMORY_AVAILABLE        :u32 =      1;
+
+#[allow(dead_code)]
 const MULTIBOOT_MEMORY_RESERVED         :u32 =      2;
+
+#[allow(dead_code)]
 const MULTIBOOT_MEMORY_ACPI_RECLAIMABLE :u32 =      3;
+
+#[allow(dead_code)]
 const MULTIBOOT_MEMORY_NVS              :u32 =      4;
+
+#[allow(dead_code)]
 const MULTIBOOT_MEMORY_BADRAM           :u32 =      5;
 
 #[repr(C)]
@@ -60,6 +112,7 @@ struct MultiBootTagMmap
   entries: MultiBootMmapEntry, 
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 struct MultiBootTagBasicMemInfo
 {
@@ -68,6 +121,7 @@ struct MultiBootTagBasicMemInfo
   mem_upper: u32,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 struct MultiBootTagElfSections
 {
@@ -78,6 +132,7 @@ struct MultiBootTagElfSections
   sections: *const u8,
 }
 
+#[allow(dead_code)]
 pub fn read_multiboot_info(addr: u32) {
 
   let mut tag = addr + 8;
@@ -108,11 +163,11 @@ pub fn read_multiboot_info(addr: u32) {
       }
       _ => {}
     }
-    tag += ((current_tag.size + 7) & !7);
+    tag += (current_tag.size + 7) & !7;
   }
 
   let final_tag = unsafe{ &*(tag as *const MultiBootTag) };
-  tag += ((final_tag.size + 7) & !7);
+  tag += (final_tag.size + 7) & !7;
   crate::printf!("multiboot start = 0x{:x}\n", addr);
   crate::printf!("multiboot end = 0x{:x}\n", tag);
   printf!("Total mbi size {}\n", tag - addr);
@@ -129,16 +184,14 @@ pub fn apply_mmap_info(addr: u32, kernel_start: u32, kernel_end: u32) -> Result<
     match current_tag.tag_type {
       MULTIBOOT_TAG_TYPE_MMAP => {
         unsafe {
-          let kernel_length = kernel_end - kernel_start;
           let mmap_tag = &*(tag as *const MultiBootTagMmap);
           let mut mmap = &mmap_tag.entries as *const MultiBootMmapEntry;
           let end = tag + current_tag.size;
           
-          let mut i = 0;
           while (mmap as u32) < end{
             if (*mmap).mem_type == MULTIBOOT_MEMORY_AVAILABLE && (*mmap).addr_low >= kernel_start{
               block_pages(0x0, kernel_end);
-              init_freelist(kernel_end + 0xC0000000, (*mmap).len_low - kernel_length);
+              init_freelist(kernel_end);
             }
             mmap = (mmap as u32 + mmap_tag.entry_size) as *const MultiBootMmapEntry;
           }
@@ -147,7 +200,7 @@ pub fn apply_mmap_info(addr: u32, kernel_start: u32, kernel_end: u32) -> Result<
       }
       _ => {}
     }
-    tag += ((current_tag.size + 7) & !7);
+    tag += (current_tag.size + 7) & !7;
   }
   Err(())
 }

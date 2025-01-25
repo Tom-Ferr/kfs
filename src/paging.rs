@@ -1,12 +1,10 @@
 use crate::io::*;
 
 pub static mut DIR: Option<PageDirectory> = None;
-// pub static mut bitmap: [[u32; 32]; 1024] = [[0; 32]; 1024];
 
 pub const FRAME_SIZE: u32 = 0x1000;
-pub const TOTAL_MEMORY: u32 = FRAME_SIZE * 1024;
-pub const NUMBER_OF_FRAMES: u32 = TOTAL_MEMORY / FRAME_SIZE;
 
+#[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum UserSpace{
     Virtual = 0x8c,
@@ -20,13 +18,13 @@ struct AlignedPage {
 }
 
 impl AlignedPage {
-    pub const fn new() -> Self {
+    const fn new() -> Self {
         Self {
             data: [0; 1024],
         }
     }
 
-    pub const fn get_data(&self, index: usize) -> u32 {
+    const fn get_data(&self, index: usize) -> u32 {
         let dt = self.data[index];
         (dt & 0xfffff000) + 0xC0000000
     }
@@ -38,6 +36,7 @@ pub struct PageTable {
     pub bitmap: [u32; 32],
 }
 
+#[allow(dead_code)]
 impl PageTable {
     fn new(dir: &PageDirectory) -> &mut PageTable {
         unsafe{
@@ -54,7 +53,7 @@ impl PageTable {
     }
 
     pub fn set_frame(&mut self, index: usize, value: u32){
-        self.pages.data[index] = value;
+        self.pages.data[index] = value | 0x3;
     }
 
     pub fn print_bitmap(&self){
@@ -103,6 +102,7 @@ pub struct PageDirectory {
     virtual_allocs: usize,
 }
 
+#[allow(dead_code)]
 impl PageDirectory {
     const fn new(user: UserSpace) -> Self {
         Self {
@@ -114,7 +114,7 @@ impl PageDirectory {
     }
 
     const fn init(ptr: *const u32) -> Self{
-        let aligned_page = unsafe { ptr as *mut AlignedPage };
+        let aligned_page = ptr as *mut AlignedPage;
         unsafe {
             let pt: &mut PageTable = &mut*((*aligned_page).get_data(UserSpace::Kernel as usize) as *mut PageTable);
             pt.bitmap[31] |= 0b11 << 30;
@@ -148,24 +148,8 @@ impl PageDirectory {
 
     pub fn set_page(&mut self, index: usize, value: u32){
         unsafe{
-            (*self.directory).data[self.whoami as usize + index] = value;
+            (*self.directory).data[self.whoami as usize + index] = (value - 0xC0000000) | 0x3;
         }
-    }
-
-    pub fn increment_allocs(&mut self){
-        self.allocs += 1;
-    }
-
-    pub fn decrement_allocs(&mut self){
-        self.allocs -= 1;
-    }
-
-    pub fn increment_virtual_allocs(&mut self){
-        self.virtual_allocs += 1;
-    }
-
-    pub fn decrement_virtual_allocs(&mut self){
-        self.virtual_allocs -= 1;
     }
 
     pub fn new_page(&mut self) -> Result<(),()>{
@@ -180,18 +164,32 @@ impl PageDirectory {
         addr += (self.allocs + 1 * 0x400000) as u32;
 
         for i in 0..1024 {
-            new_page.set_frame(i, addr | 0x3);
+            new_page.set_frame(i, addr);
             addr += 4096;
         }
         new_page.bitmap[31] |= 0b11 << 30; //1022 % 32 = 30
-        unsafe{
-            self.set_page(self.allocs + 1, (new_page as *const PageTable) as u32 | 0x3);
-        }
+        self.set_page(self.allocs + 1, (new_page as *const PageTable) as u32);
         self.allocs += 1;
+        Ok(())
+    }
+
+    pub fn new_virtual_page(&mut self, offset: usize) -> Result<(),()>{
+        unsafe{
+            if let Some(page) = alloc_page(size_of::<PageTable>()){
+                let pg = page as *mut PageTable;
+                pg.write_volatile(PageTable {pages: AlignedPage::new(), bitmap: [0; 32],});
+                self.set_page(UserSpace::Virtual as usize + offset, page);
+                self.virtual_allocs += 1;
+            }
+            else{
+                return Err(());
+            }
+        }
         Ok(())
     }
 }
 
+#[allow(dead_code)]
 pub fn alloc_page(nbytes: usize) -> Option<u32> {
     let mut npages = nbytes as u32 / FRAME_SIZE;
     if nbytes as u32 % FRAME_SIZE != 0{
@@ -200,22 +198,23 @@ pub fn alloc_page(nbytes: usize) -> Option<u32> {
     let limit = 32 - npages;
     let cursor = !0 >> limit;
     unsafe{
+        #[allow(static_mut_refs)]
         let dir = DIR.as_mut().unwrap();
 
         for offset in 0..=dir.get_allocs(){
             let tab = &mut *(dir.get_page(offset as usize) as *mut PageTable);
 
             for i in 0..1024 {
-                let byteIndex: usize = i / 32;
-                let bitIndex: usize = i % 32;
+                let byte_index: usize = i / 32;
+                let bit_index: usize = i % 32;
 
-                if bitIndex > limit as usize{
+                if bit_index > limit as usize{
                     continue;
                 }
                 
-                let target = cursor << bitIndex;
-                if (tab.bitmap[byteIndex] & target) == 0 {
-                    tab.bitmap[byteIndex] |= target;
+                let target = cursor << bit_index;
+                if (tab.bitmap[byte_index] & target) == 0 {
+                    tab.bitmap[byte_index] |= target;
                     return Some(tab.get_frame(i));
                 }
             }
@@ -228,54 +227,58 @@ pub fn alloc_page(nbytes: usize) -> Option<u32> {
     }
     None
 }
-    
+
+#[allow(dead_code)]
 pub fn free_page(ptr: u32) {
     unsafe {
 
+        #[allow(static_mut_refs)]
         let dir = DIR.as_mut().unwrap();
         let offset = ptr / 0x400000;
         let tab = &mut*(dir.get_page(offset as usize) as *mut PageTable);
-        let frameIndex: usize = ((ptr / FRAME_SIZE) % 1024) as usize;
-        let byteIndex: usize = frameIndex / 32;
-        let bitIndex: usize = frameIndex % 32;
+        let frame_index: usize = ((ptr / FRAME_SIZE) % 1024) as usize;
+        let byte_index: usize = frame_index / 32;
+        let bit_index: usize = frame_index % 32;
         
-        tab.bitmap[byteIndex] &= !(1 << bitIndex);
+        tab.bitmap[byte_index] &= !(1 << bit_index);
     }
 }
 
+#[allow(dead_code)]
 pub fn block_pages(addr: u32, len: u32){
     unsafe{
+        #[allow(static_mut_refs)]
         let dir = DIR.as_mut().unwrap();
         let end = addr + len;
 
-        let begin_offset = addr / 0x400000;
-        let end_offset = end / 0x400000;
+        let _begin_offset = addr / 0x400000;
+        let _end_offset = end / 0x400000;
 
-        let begin_frameIndex = ((addr / FRAME_SIZE) % 1024);
-        let end_frameIndex = ((end / FRAME_SIZE) % 1024);
+        let begin_frame_index = (addr / FRAME_SIZE) % 1024;
+        let end_frame_index = (end / FRAME_SIZE) % 1024;
 
-        let begin_byteIndex = begin_frameIndex / 32;
-        let end_byteIndex = end_frameIndex / 32;
+        let begin_byte_index = begin_frame_index / 32;
+        let end_byte_index = end_frame_index / 32;
 
-        for offset in begin_offset..=end_offset{
+        for offset in _begin_offset..=_end_offset{
             let tab = &mut*(dir.get_page(offset as usize) as *mut PageTable);
-            for byteIndex in 0..32{
+            for byte_index in 0..32{
                 match offset{
-                    begin_offset if byteIndex == begin_byteIndex => {
-                        let bitIndex = begin_frameIndex % 32;
-                        tab.bitmap[byteIndex as usize] |= (!0) << bitIndex;
+                    _begin_offset if byte_index == begin_byte_index => {
+                        let bit_index = begin_frame_index % 32;
+                        tab.bitmap[byte_index as usize] |= (!0) << bit_index;
                     },
    
-                    end_offset if byteIndex == end_byteIndex => {
-                        let bitIndex = end_frameIndex % 32;
-                        tab.bitmap[byteIndex as usize] |= !((!0) << bitIndex);
+                    _end_offset if byte_index == end_byte_index => {
+                        let bit_index = end_frame_index % 32;
+                        tab.bitmap[byte_index as usize] |= !((!0) << bit_index + 1);
                     },
 
-                    begin_offset if byteIndex < begin_byteIndex => continue,
+                    _begin_offset if byte_index < begin_byte_index => continue,
                     
-                    end_offset if byteIndex > end_byteIndex => break,
+                    _end_offset if byte_index > end_byte_index => break,
 
-                    _ => tab.bitmap[byteIndex as usize] |= !0,
+                    _ => tab.bitmap[byte_index as usize] |= !0,
                 }
             }
             

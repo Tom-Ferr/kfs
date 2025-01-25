@@ -39,37 +39,34 @@ fn check_virtual_space(nbytes: usize) -> Option<u32>{
     }
 
     unsafe{     
+        #[allow(static_mut_refs)]
         let dir = DIR.as_mut().unwrap();
-        for offset in 0..=ntables{
-            if offset > dir.get_virtual_allocs(){
-                if let Some(page) = alloc_page(size_of::<PageTable>()){
-                    dir.set_page(UserSpace::Virtual as usize + offset as usize, page);
-                    dir.increment_virtual_allocs();
-                }
-                else{
-                    return None;
-                }
+        while ntables > dir.get_virtual_allocs(){
+            if let Err(..) = dir.new_virtual_page(dir.get_virtual_allocs() + 1){
+                return None;
             }
+        }
+        for offset in 0..=dir.get_virtual_allocs(){
             let tab = &mut *(dir.get_page(UserSpace::Virtual as usize + offset as usize) as *mut PageTable);
-            let mut cursor = !0;
-            let mut limit = 0;
-            let mut ready = false;
-            if nframes < 32{
-                limit = 32 - nframes;
-                cursor = cursor >> limit;
-            }
             for i in 0..1024 {
-                let byteIndex: usize = i / 32;
-                let bitIndex: usize = i % 32;
+                let byte_index: usize = i / 32;
+                let bit_index: usize = i % 32;
+
+                let mut cursor = !0;
+                let mut limit = 0;
+                if nframes < 32{
+                    limit = 32 - nframes;
+                    cursor = cursor >> limit;
+                }
                 
-                if bitIndex > limit as usize{
+                if bit_index > limit as usize{
                     continue;
                 }
                 
-                let target = cursor << bitIndex;
-                if (tab.bitmap[byteIndex] & target) == 0 {
+                let target = cursor << bit_index;
+                if (tab.bitmap[byte_index] & target) == 0 {
                     if candidate == None{
-                        candidate = Some((offset << 22 | i) as u32);
+                        candidate = Some(( (UserSpace::Virtual as usize + offset + dir.get_whoami()) << 22 | i << 10) as u32);
                     }
                     nframes -= 32 - limit;
                     if nframes == 0 {
@@ -85,6 +82,7 @@ fn check_virtual_space(nbytes: usize) -> Option<u32>{
     None
 }
 
+#[allow(dead_code)]
 fn vmap(nbytes: usize, vaddr: u32) -> Result<(),()> {
 
     let mut nframes = nbytes / FRAME_SIZE as usize;
@@ -93,27 +91,26 @@ fn vmap(nbytes: usize, vaddr: u32) -> Result<(),()> {
     }
     
     unsafe{
-        let mut ptr = vaddr as *const Header;
+        let mut ptr = vaddr;
+        #[allow(static_mut_refs)]
         let dir = DIR.as_mut().unwrap();
-        for i in 0..nframes{
+        for _ in 0..nframes{
             if let Some(addr) = alloc_page(FRAME_SIZE as usize){
-                let frame_offset = (ptr as u32 & 0xFFF) as usize;
-                let tab_index = (ptr as u32 >> 12 & 0x3FF) as usize;
-                let dir_index = (ptr as u32 >> 22) as usize;
+                let tab_index = (ptr >> 12 & 0x3FF) as usize;
+                let dir_index = (ptr >> 22) as usize;
                 let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
-                tab.set_frame(tab_index, addr - 0xC0000000 | 0x3);
-                ptr.wrapping_add(FRAME_SIZE as usize);
+                tab.set_frame(tab_index, addr - 0xC0000000);
+                ptr += FRAME_SIZE;
             }
             else{
-                let mut begin = vaddr as *const Header;
+                let mut begin = vaddr;
                 while begin != ptr{
-                    let frame_offset = (begin as u32 & 0xFFF) as usize;
-                    let tab_index = (begin as u32 >> 12 & 0x3FF) as usize;
-                    let dir_index = (begin as u32 >> 22) as usize;
+                    let tab_index = (begin >> 12 & 0x3FF) as usize;
+                    let dir_index = (begin >> 22) as usize;
                     let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
                     let frame = tab.get_frame(tab_index);
                     free_page(frame);
-                    begin.wrapping_add(FRAME_SIZE as usize);
+                    begin += FRAME_SIZE;
                 }
                 return Err(());
             }
@@ -131,7 +128,7 @@ fn virtual_allocation(nbytes: usize) -> Option<u32>{
     None
 }
 
-fn morecore(mut nunits: usize, freep: &mut Option<*mut Header>, f: fn(usize) -> Option<u32>) -> Option<*mut Header>{
+fn morecore(mut nunits: usize, freep: *mut Option<*mut Header>, f: fn(usize) -> Option<u32>) -> Option<*mut Header>{
 
     if nunits < NALLOC {
         nunits = NALLOC;
@@ -148,19 +145,16 @@ fn morecore(mut nunits: usize, freep: &mut Option<*mut Header>, f: fn(usize) -> 
     None
 }
 
-fn malloc_routine(nbytes: usize, freep: &mut Option<*mut Header>, f: fn(usize) -> Option<u32>) -> Option<u32>{
-    if nbytes > 128 * 1024{
-        return None;
-    }
+unsafe fn malloc_routine(nbytes: usize, freep: *mut Option<*mut Header>, f: fn(usize) -> Option<u32>) -> Option<u32>{
     unsafe{
         let nunits: usize = ((nbytes + size_of::<Header>() - 1) / size_of::<Header>()) + 1;
         
         if *freep == None{
-            BASE.next = Some(&mut BASE as *mut Header);
+            BASE.next = Some(&raw mut BASE as *mut Header);
             *freep = BASE.next;
         }
 
-        let mut tmp: Option<*mut Header> = *freep;
+        let tmp: Option<*mut Header> = *freep;
         let mut prev: *mut Header = tmp.unwrap();
         let mut curr: *mut Header = (*prev).get_next();
         loop{
@@ -170,11 +164,11 @@ fn malloc_routine(nbytes: usize, freep: &mut Option<*mut Header>, f: fn(usize) -
                 }
                 else{
                     (*curr).size -= nunits;
-                    curr.wrapping_add((*curr).size);
+                    curr = curr.wrapping_add((*curr).size);
                     (*curr).size = nunits;
                 }
                 *freep = Some(prev);
-                break;
+                return Some(curr.wrapping_add(1) as u32);
             }
             if curr == *((*freep).as_ref().unwrap()) {
                 let addr: Option<*mut Header> = morecore(nunits, freep, f);
@@ -186,14 +180,13 @@ fn malloc_routine(nbytes: usize, freep: &mut Option<*mut Header>, f: fn(usize) -
             prev = curr;
             curr = (*curr).get_next();
         }
-        Some(curr.wrapping_add(1) as u32)
     }
 }
 
-fn free_routine(addr: u32, freep: &mut Option<*mut Header>) {
+unsafe fn free_routine(addr: u32, freep: *mut Option<*mut Header>) {
     unsafe{    
         if *freep == None{
-            BASE.next = Some(&mut BASE as *mut Header);
+            BASE.next = Some(&raw mut BASE as *mut Header);
             *freep = BASE.next;
         }
 
@@ -224,44 +217,54 @@ fn free_routine(addr: u32, freep: &mut Option<*mut Header>) {
     }
 }
 
+#[allow(dead_code)]
 pub fn kmalloc(nbytes: usize) -> Option<u32>{
+    if nbytes > 127 * 1024{
+        return None;
+    }
     unsafe{
-        malloc_routine(nbytes, &mut PHYLS,alloc_page)
+        malloc_routine(nbytes, &raw mut PHYLS,alloc_page)
     }
 }
 
+#[allow(dead_code)]
 pub fn vmalloc(nbytes: usize) -> Option<u32>{
     unsafe{
-        malloc_routine(nbytes, &mut VITLS, virtual_allocation)
+        malloc_routine(nbytes, &raw mut VITLS, virtual_allocation)
     }
 }
 
+#[allow(dead_code)]
 pub fn kfree(addr: u32){
     unsafe{
-        free_routine(addr, &mut PHYLS);
+        free_routine(addr, &raw mut PHYLS);
     }
 }
 
+#[allow(dead_code)]
 pub fn vfree(addr: u32){
     unsafe{
-        free_routine(addr, &mut PHYLS);
+        free_routine(addr, &raw mut VITLS);
     }
 }
 
+#[allow(dead_code)]
 pub fn ksize(addr: u32) -> usize{
     let target: *mut Header = (addr as *mut Header).wrapping_sub(1);
     unsafe {(*target).size * size_of::<Header>()}
 }
 
+#[allow(dead_code)]
 pub fn vsize(addr: u32) -> usize{
     let target: *mut Header = (addr as *mut Header).wrapping_sub(1);
     unsafe {(*target).size * size_of::<Header>()}
 }
 
-pub fn init_freelist(addr: u32, length: u32){
+pub fn init_freelist(kernel_end: u32){
     unsafe{
-        let target: *mut Header = addr as *mut Header;
-        (*target).size = length as usize / size_of::<Header>();
+        block_pages(kernel_end, (NALLOC * size_of::<Header>()) as u32);
+        let target = (kernel_end + 0xC0000000) as *mut Header;
+        (*target).size = NALLOC;
         kfree(target.wrapping_add(1) as u32);
     }
 }
