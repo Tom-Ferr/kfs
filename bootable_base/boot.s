@@ -30,13 +30,6 @@ init_table:
     stosd                ; Store the value in EAX at the address pointed by EDI
     add eax, 0x1000      ; Increment EAX by 4 KB (next physical page)
     loop .map_pages      ; Decrement ECX, and repeat until ECX = 0
-   ; mov eax, 0xB8000
-   ; or eax, 3
-   ; mov edi, page_table - 0xC0000000
-   ; mov [edi + 4088], eax
-   ; xor eax, eax
-   ; or eax, 3
-   ; mov [edi + 4092], eax
     jmp .setup_directory
 .setup_directory:
     mov eax, page_table - 0xC0000000
@@ -90,5 +83,5 @@ virtual_space:
 
 align 16
 stack_bottom:
-    resb 4096 * 20
+    resb 4096 * 40
 stack_top:

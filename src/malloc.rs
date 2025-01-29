@@ -229,6 +229,9 @@ pub fn kmalloc(nbytes: usize) -> Option<u32>{
 
 #[allow(dead_code)]
 pub fn vmalloc(nbytes: usize) -> Option<u32>{
+    if nbytes > 0xA00000{
+        return None;
+    }
     unsafe{
         malloc_routine(nbytes, &raw mut VITLS, virtual_allocation)
     }
@@ -251,13 +254,13 @@ pub fn vfree(addr: u32){
 #[allow(dead_code)]
 pub fn ksize(addr: u32) -> usize{
     let target: *mut Header = (addr as *mut Header).wrapping_sub(1);
-    unsafe {(*target).size * size_of::<Header>()}
+    unsafe {((*target).size * size_of::<Header>()) - size_of::<Header>()}
 }
 
 #[allow(dead_code)]
 pub fn vsize(addr: u32) -> usize{
     let target: *mut Header = (addr as *mut Header).wrapping_sub(1);
-    unsafe {(*target).size * size_of::<Header>()}
+    unsafe {((*target).size * size_of::<Header>()) - size_of::<Header>()}
 }
 
 pub fn init_freelist(kernel_end: u32){
