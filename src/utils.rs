@@ -1,3 +1,6 @@
+use crate::malloc::{kmalloc, kfree};
+use crate::io::{scan_code_to_ascii, read_key};
+
 #[macro_export]
 macro_rules! get_reg {
     ($reg:ident) => {{
@@ -19,6 +22,20 @@ pub fn buffer_count(mut offset: u32) -> u32{
         while *vga_buffer.offset(offset as isize) != b'\0'{
             count += 1;
             offset += 2;
+        }
+    }
+    count 
+}
+
+pub fn strlen(string: *const u8) -> usize{
+    let mut count: usize = 0;
+    let mut offset = 0;
+
+    unsafe{
+
+        while *string.offset(offset as isize) != b'\0'{
+            count += 1;
+            offset += 1;
         }
     }
     count 
@@ -86,4 +103,41 @@ pub fn vga_strcmp(offset: u32, string: &[u8]) -> bool {
         }
     }
     true
+}
+
+pub fn get_line() -> Result<*const u8, ()> {
+    let mut offset: u32 = 0;
+    let mut size: u32 = 80;
+    let mut buffer: Option<*mut u8> = None;
+    loop{
+        if let  Some(addr) = kmalloc(size as usize){
+            if !buffer.is_none(){
+                let prev = buffer.unwrap();
+                memcpy(prev as *mut u8, addr as *mut u8, offset);
+                kfree(prev as u32);
+            }
+            buffer = Some(addr as *mut u8);
+            unsafe{
+
+                for i in offset..size{
+                    loop{
+                        let scan_code = read_key();
+                        if scan_code == 0x1C{
+                            *(buffer.as_ref().unwrap()).offset(i as isize) = b'\0';
+                            return Ok(buffer.unwrap() as *const u8);
+                        }
+                        if let Some(character) = scan_code_to_ascii(scan_code, crate::keyboard::SHIFT_PRESSED) {
+                            *(buffer.as_ref().unwrap()).offset(i as isize) = character;
+                            break;
+                        }
+                    }
+                }
+            }
+            offset = size;
+            size *= 2;
+        }
+        else {
+            return Err(());
+        }
+    }
 }
