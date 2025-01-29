@@ -1,6 +1,7 @@
 use crate::io::*;
 use crate::key_handlers::*;
 use crate::printf;
+use crate::keyboard::SHIFT_PRESSED;
 
 #[allow(unused_imports)]
 use crate::printk;
@@ -24,13 +25,49 @@ static ASCII_ART: &[u8] = b"
                  <<.>...          .....>...<......>.>>.<.<<<
                  .>......        ..>>...<<....>>.....>.<..>.";
 
-static mut SHIFT_PRESSED: u8 = 0b0;
+static mut SCREEN2_BUFFER: ScreenBuff = ScreenBuff::new();
 
-const L_SHIFT: u8 = 0x2A;
-const R_SHIFT: u8 = 0x36;
-const L_SHIFT_RELEASE: u8 = 0x2A + 0x80;
-const R_SHIFT_RELEASE: u8 = 0x36 + 0x80;
-const CAPS_LOCK:u8 = 0x3A;
+struct ScreenBuff{
+    text: [u8; 150*80],
+    color: [u8; 150*80],
+    offset: u32,
+}
+
+impl ScreenBuff{
+    const fn new() -> Self{
+        unsafe{
+            Self{
+                text: [0; 150*80],
+                color: [BACKGROUND_COLOR << 4 | TEXT_COLOR; 150*80],
+                offset: 0,
+            }
+        }
+    }
+
+    fn import(&mut self){
+        let vga_buffer = VGA_BUFFER as *const u8;
+        unsafe{
+
+            for i in 0..(150*80){
+                self.text[i] = *vga_buffer.offset(i as isize * 2);
+                self.color[i] = *vga_buffer.offset((i as isize * 2) + 1);
+            }
+        }
+        self.offset = get_cursor();
+    }
+
+    fn export(&self){
+        let vga_buffer = VGA_BUFFER as *mut u8;
+        unsafe{
+
+            for i in 0..(150*80){
+                *vga_buffer.offset(i as isize * 2) = self.text[i];
+                *vga_buffer.offset((i as isize * 2) + 1) = self.color[i];
+            }
+        }
+        set_cursor(self.offset);
+    }
+}
 
 #[derive(PartialEq, Clone)]
 pub enum Screen {
@@ -82,28 +119,19 @@ fn screen_1(current_screen: &Screen) -> Screen {
 
 fn screen_2(current_screen: &Screen) -> Screen {
     enable_cursor(true);
-    clear_vga();
+    unsafe {
+        SCREEN2_BUFFER.export();
     
-    loop {
-        let mut offset = get_cursor();
-        let scan_code = read_key();
-        unsafe{
-            if scan_code == L_SHIFT || scan_code == R_SHIFT{
-                SHIFT_PRESSED |= 0b1;
-            }
-            else if scan_code == L_SHIFT_RELEASE || scan_code == R_SHIFT_RELEASE{
-                SHIFT_PRESSED &= 0b10;
-            }
-            else if scan_code == CAPS_LOCK{
-                SHIFT_PRESSED ^= 0b10;
-            }
-            match scan_code {
+        loop {
+            let mut offset = get_cursor();
+            let scan_code = read_key();
+            match scan_code{
                 0x0E => handle_backspace(&mut offset),
                 0x4B => handle_left_arrow(&mut offset),
                 0x4D => handle_right_arrow(&mut offset),
                 0x53 => handle_delete(&mut offset),
                 0x1C => handle_enter(&mut offset),
-                0x1D => { if let Some(f) = handle_shortcuts(current_screen){ return f;} },
+                0x1D => { if let Some(f) = handle_shortcuts(current_screen){ SCREEN2_BUFFER.import(); return f;} },
                 _ => handle_character(scan_code, SHIFT_PRESSED, &mut offset),
             }
             

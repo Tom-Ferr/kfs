@@ -83,8 +83,8 @@ pub enum LogLevel {
     DEBUG,
 }
 
-static mut TEXT_COLOR: u8 = Color::LightGreen as u8;
-static mut BACKGROUND_COLOR: u8 = Color::Black as u8;
+pub static mut TEXT_COLOR: u8 = Color::LightGreen as u8;
+pub static mut BACKGROUND_COLOR: u8 = Color::Black as u8;
 
 pub fn paint(mut offset: u32, color: u8) {
     unsafe{
