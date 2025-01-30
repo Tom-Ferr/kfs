@@ -140,7 +140,7 @@ pub extern "C" fn isr_handler(regs: *const IntReg){
         let err_code = (*regs).err_code;
         match (*regs).int_no {
 
-            0..32 => panic!("{}, {}", EXCEPT_MSG[(*regs).int_no as usize], err_code),
+            0..32 => panic!("{}, error code: {}", EXCEPT_MSG[(*regs).int_no as usize], err_code),
             0x80 => syscall_handler(regs),
             _   => {},
         }

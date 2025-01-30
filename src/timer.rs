@@ -17,6 +17,6 @@ pub fn init_timer(){
     unsafe{
         outb(0x43, 0x36);
         outb(0x40, (divisor & 0xFF) as u8);
-        outb(0x40, (divisor >> 8 & 0xFF) as u8);
+        outb(0x40, ((divisor >> 8) & 0xFF) as u8);
     }
 }

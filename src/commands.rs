@@ -1,4 +1,5 @@
 use crate::io::*;
+use crate::keyboard::{set_azerty, set_querty};
 
 use core::arch::asm;
 
@@ -26,7 +27,7 @@ fn shutdown() -> ! {
     }
 }
 
-pub const COMMANDS: [(&[u8], fn(u32)); 16] = [
+pub const COMMANDS: [(&[u8], fn(u32)); 18] = [
     (b"dark", |_offset: u32| color_mode(false)),
     (b"light", |_offset: u32| color_mode(true)),
     (b"cyan", |offset: u32| paint(offset, Color::Cyan as u8)),
@@ -43,4 +44,6 @@ pub const COMMANDS: [(&[u8], fn(u32)); 16] = [
     (b"halt", |_offset: u32| halt()),
     (b"reboot", |_offset: u32| reboot()),
     (b"shutdown", |_offset: u32| shutdown()),
+    (b"azerty", |_offset: u32| set_azerty()),
+    (b"querty", |_offset: u32| set_querty()),
 ];
