@@ -1,5 +1,5 @@
 use crate::io::*;
-use crate::keyboard::{set_azerty, set_querty};
+use crate::keyboard::{set_azerty, set_qwerty};
 
 use core::arch::asm;
 
@@ -45,5 +45,5 @@ pub const COMMANDS: [(&[u8], fn(u32)); 18] = [
     (b"reboot", |_offset: u32| reboot()),
     (b"shutdown", |_offset: u32| shutdown()),
     (b"azerty", |_offset: u32| set_azerty()),
-    (b"querty", |_offset: u32| set_querty()),
+    (b"qwerty", |_offset: u32| set_qwerty()),
 ];

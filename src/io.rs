@@ -1,7 +1,7 @@
 use core::arch::asm;
 use core::fmt;
 
-use crate::keyboard::CURRENT_LAYOUT;
+use crate::keyboard::{CURRENT_LAYOUT, ALT_LAYOUT, AZERTY_LAYOUT};
 use crate::utils;
 use crate::get_reg;
 
@@ -284,6 +284,19 @@ pub fn scan_code_to_ascii(scan_code: u8, shift_key: u8) -> Option<u8> {
 
         
         match scan_code {
+
+            0x03 if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[0]),
+            0x04 if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[1]),
+            0x05 if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[2]),
+            0x06 if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[3]),
+            0x07 if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[4]),
+            0x08 if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[5]),
+            0x09 if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[6]),
+            0x0A if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[7]),
+            0x0B if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[8]),
+            0x0C if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[9]),
+            0x0D if CURRENT_LAYOUT == AZERTY_LAYOUT && shift_key & 4 == 4 => Some(ALT_LAYOUT[10]),
+
             0x10 if shift_key & 3 == 0 || shift_key & 3 == 3 => Some(CURRENT_LAYOUT[60]),
             0x11 if shift_key & 3 == 0 || shift_key & 3 == 3 => Some(CURRENT_LAYOUT[61]),
             0x12 if shift_key & 3 == 0 || shift_key & 3 == 3 => Some(CURRENT_LAYOUT[62]),
@@ -337,7 +350,6 @@ pub fn scan_code_to_ascii(scan_code: u8, shift_key: u8) -> Option<u8> {
             0x30 if shift_key & 3 == 2 || shift_key & 3 == 1 => Some(CURRENT_LAYOUT[41]),
             0x31 if shift_key & 3 == 2 || shift_key & 3 == 1 => Some(CURRENT_LAYOUT[42]),
             0x32 if shift_key & 3 == 2 || shift_key & 3 == 1 => Some(CURRENT_LAYOUT[43]),
-    
         
             0x02 if shift_key & 1 == 0 => Some(CURRENT_LAYOUT[48]),
             0x03 if shift_key & 1 == 0 => Some(CURRENT_LAYOUT[49]),
