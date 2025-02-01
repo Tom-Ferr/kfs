@@ -1,5 +1,6 @@
 use crate::io::outb;
 use crate::idt::{install_irq_routine, IntReg};
+use core::arch::asm;
 
 static mut TICKS: usize = 0;
 const FREQ: u32 = 100;
@@ -18,5 +19,16 @@ pub fn init_timer(){
         outb(0x43, 0x36);
         outb(0x40, (divisor & 0xFF) as u8);
         outb(0x40, ((divisor >> 8) & 0xFF) as u8);
+    }
+}
+
+pub fn schedule(time: usize){
+    unsafe{
+        let target = TICKS + time;
+        while TICKS < target {}
+        asm!("
+            mov eax, 1
+            int 0x80
+        ")
     }
 }
