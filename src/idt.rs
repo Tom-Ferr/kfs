@@ -1,4 +1,5 @@
 use core::mem::size_of;
+use core::arch::asm;
 
 use crate::io::outb;
 use crate::syscalls::syscall_handler;
@@ -132,6 +133,29 @@ pub struct IntReg{
 impl IntReg{
     pub fn get_eax(&self) -> u32 {
         self.eax
+    }
+}
+
+pub struct InterruptGuard {}
+
+impl InterruptGuard{
+    pub fn new() -> Self{
+        InterruptGuard::clear();
+        Self{}
+    }
+    fn clear(){
+        unsafe{asm!("cli");}
+    }
+    fn set(){
+        unsafe{asm!("sti");}
+    }
+
+}
+
+impl Drop for InterruptGuard{
+    fn drop(&mut self){
+        init_idt();
+        InterruptGuard::set();
     }
 }
 

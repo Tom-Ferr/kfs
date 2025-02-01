@@ -2,6 +2,7 @@ use core::arch::asm;
 use core::fmt;
 
 use crate::keyboard::{CURRENT_LAYOUT, ALT_LAYOUT, AZERTY_LAYOUT};
+use crate::idt::InterruptGuard;
 use crate::utils;
 use crate::get_reg;
 
@@ -193,10 +194,10 @@ impl fmt::Write for Writer {
 }
 
 pub fn _print_fmt_str(args: core::fmt::Arguments) {
+    let _int = InterruptGuard::new();
     use core::fmt::Write;
     let mut writer = Writer::new();
     let _ = writer.write_fmt(args);
-    crate::idt::init_idt();
 }
 
 pub fn _print_fmt_log(level: LogLevel, args: core::fmt::Arguments) {
@@ -230,7 +231,7 @@ pub unsafe fn put_vga_char(byte: u8, offset: u32) {
 }
 
 pub fn put_vga_string(string: &[u8]) {
-    
+
     let mut offset = get_cursor();
     for &byte in string {
         unsafe {
