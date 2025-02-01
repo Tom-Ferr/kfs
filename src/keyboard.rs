@@ -2,7 +2,6 @@ use crate::idt::{install_irq_routine, IntReg};
 use crate::io::read_key;
 
 pub static mut SHIFT_PRESSED: u8 = 0b0;
-pub static mut PRESSED_KEY: u8 = 0x0;
 pub static mut CURRENT_LAYOUT: [u8; 94] = QWERTY_LAYOUT;
 
 const L_SHIFT: u8 = 0x2A;
@@ -25,7 +24,7 @@ const QWERTY_LAYOUT: [u8; 94] = [
 
 const AZERTY_LAYOUT: [u8; 94] = [
     0xFD, b'1', b'2', b'3', b'4', b'5', b'6', b'7', b'8', b'9', b'0', 0xF8, b'+',  // Row 1: ² 1 2 3 4 5 6 7 8 9 0 ° +
-    b'A', b'Z', b'E', b'R', b'T', b'Y', b'U', b'I', b'O', b'P', b'^', b'$', 0x9C,  // Row 2: A Z E R T Y U I O P ^ $ £
+    b'A', b'Z', b'E', b'R', b'T', b'Y', b'U', b'I', b'O', b'P', b'^', 0x9C, 0xE6,  // Row 2: A Z E R T Y U I O P ¨ £ μ
     b'Q', b'S', b'D', b'F', b'G', b'H', b'J', b'K', b'L', b'M', b'%',              // Row 3: Q S D F G H J K L M %
     b'W', b'X', b'C', b'V', b'B', b'N', b'?', b'.', b'/', 0x15,                    // Row 4: W X C V B N ? . / §
 
@@ -43,7 +42,7 @@ pub fn set_querty(){
     unsafe{CURRENT_LAYOUT = QWERTY_LAYOUT};
 }
 
-fn keyboard_handler(regs: *const IntReg){
+fn keyboard_handler(_regs: *const IntReg){
     let scan_code = read_key();
     unsafe{
         if scan_code == L_SHIFT || scan_code == R_SHIFT{

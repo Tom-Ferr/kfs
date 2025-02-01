@@ -12,29 +12,40 @@ mod gdt;
 mod paging;
 mod multiboot;
 mod malloc;
+mod idt;
+mod timer;
+mod keyboard;
+mod syscalls;
 
 use screens::render;
 use gdt::init_gdt;
 use paging::init_page_tables;
 use multiboot::apply_mmap_info;
+use idt::init_idt;
+use timer::init_timer;
+use keyboard::init_keyboard;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     if let Some(location) = _info.location() {
-        printk!(ERROR, "{}", location);
+        printk!(ERROR, "{}, {}", location, _info.message());
     }
-    loop {}
+    unsafe { panic_halt(); }
 }
 
 extern "C" {
     static kernel_start: u32;
     static kernel_end: u32;
+    fn panic_halt() -> !;
 }
 
 #[no_mangle]
 pub extern "C" fn kernel(multiboot_info: u32) -> ! {
 
     init_gdt();
+    init_idt();
+    init_timer();
+    init_keyboard();
 
     unsafe{
         let ks = &kernel_start as *const u32 as u32;
@@ -45,6 +56,6 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
             panic!();
         }
     }
-    
-    render();    
+
+    render();
 }

@@ -120,6 +120,7 @@ fn screen_1(current_screen: &Screen) -> Screen {
 fn screen_2(current_screen: &Screen) -> Screen {
     enable_cursor(true);
     unsafe {
+        #[allow(static_mut_refs)]
         SCREEN2_BUFFER.export();
     
         loop {
@@ -131,7 +132,7 @@ fn screen_2(current_screen: &Screen) -> Screen {
                 0x4D => handle_right_arrow(&mut offset),
                 0x53 => handle_delete(&mut offset),
                 0x1C => handle_enter(&mut offset),
-                0x1D => { if let Some(f) = handle_shortcuts(current_screen){ SCREEN2_BUFFER.import(); return f;} },
+                0x1D => { if let Some(f) = handle_shortcuts(current_screen){ #[allow(static_mut_refs)]SCREEN2_BUFFER.import(); return f;} },
                 _ => handle_character(scan_code, SHIFT_PRESSED, &mut offset),
             }
             

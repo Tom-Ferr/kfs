@@ -1,6 +1,6 @@
 use core::mem::size_of;
 
-use crate::io::{outb, inb};
+use crate::io::outb;
 use crate::syscalls::syscall_handler;
 
 #[allow(dead_code)]
@@ -108,45 +108,6 @@ static EXCEPT_MSG: [&str; 32] = [
     "Reserved"
 ];
 
-pub fn install_irq_routine(index: usize, handler: fn(*const IntReg)){
-    unsafe{
-        IRQ_ROUTINES[index] = Some(handler);
-    }
-}
-
-pub fn uninstall_irq_routine(index: usize){
-    unsafe{
-        IRQ_ROUTINES[index] = None;
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn irq_handler(regs: *const IntReg){
-    unsafe{
-
-        if let Some(handler) = IRQ_ROUTINES[((*regs).int_no - 32) as usize]{
-            handler(regs);
-        }
-        if (*regs).int_no >= 40{
-            outb(0xA0, 0x20);
-        }
-        outb(0x20, 0x20);
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn isr_handler(regs: *const IntReg){
-    unsafe{
-        let err_code = (*regs).err_code;
-        match (*regs).int_no {
-
-            0..32 => panic!("{}, error code: {}", EXCEPT_MSG[(*regs).int_no as usize], err_code),
-            0x80 => syscall_handler(regs),
-            _   => {},
-        }
-    }
-}
-
 #[repr(C, packed)]
 pub struct IntReg{
     cr2: u32,
@@ -230,6 +191,46 @@ impl Idtr {
         Self{
             limit: (size_of::<IdtEntries>() - 1) as u16,
             base: entries,
+        }
+    }
+}
+
+pub fn install_irq_routine(index: usize, handler: fn(*const IntReg)){
+    unsafe{
+        IRQ_ROUTINES[index] = Some(handler);
+    }
+}
+
+#[allow(dead_code)]
+pub fn uninstall_irq_routine(index: usize){
+    unsafe{
+        IRQ_ROUTINES[index] = None;
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn irq_handler(regs: *const IntReg){
+    unsafe{
+
+        if let Some(handler) = IRQ_ROUTINES[((*regs).int_no - 32) as usize]{
+            handler(regs);
+        }
+        if (*regs).int_no >= 40{
+            outb(0xA0, 0x20);
+        }
+        outb(0x20, 0x20);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn isr_handler(regs: *const IntReg){
+    unsafe{
+        let err_code = (*regs).err_code;
+        match (*regs).int_no {
+
+            0..32 => panic!("{}, error code: {}", EXCEPT_MSG[(*regs).int_no as usize], err_code),
+            0x80 => syscall_handler(regs),
+            _   => {},
         }
     }
 }

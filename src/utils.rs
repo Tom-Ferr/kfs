@@ -27,6 +27,7 @@ pub fn buffer_count(mut offset: u32) -> u32{
     count 
 }
 
+#[allow(dead_code)]
 pub fn strlen(string: *const u8) -> usize{
     let mut count: usize = 0;
     let mut offset = 0;
@@ -105,6 +106,7 @@ pub fn vga_strcmp(offset: u32, string: &[u8]) -> bool {
     true
 }
 
+#[allow(dead_code)]
 pub fn get_line() -> Result<*const u8, ()> {
     let mut offset: u32 = 0;
     let mut size: u32 = 80;

@@ -4,7 +4,7 @@ use crate::idt::{install_irq_routine, IntReg};
 static mut TICKS: usize = 0;
 const FREQ: u32 = 100;
 
-fn timer(regs: *const IntReg){
+fn timer(_regs: *const IntReg){
     unsafe{
         TICKS += 1;
     }

@@ -17,18 +17,18 @@ pub const VGA_BUFFER: u32 = 0xC00B8000;
 #[allow(dead_code)]
 macro_rules! printf {
     ($($arg:tt)*) => {
-        $crate::io::_print_fmt_str(core::format_args!($($arg)*));
+        $crate::io::_print_fmt_str(core::format_args!($($arg)*))
     };
 }
 #[macro_export]
 #[allow(dead_code)]
 macro_rules! printk {
     ($level:ident, $($arg:tt)*) => {
-        $crate::io::_print_fmt_log($crate::io::LogLevel::$level, core::format_args!($($arg)*));
+        $crate::io::_print_fmt_log($crate::io::LogLevel::$level, core::format_args!($($arg)*))
     };
     
     ($($arg:tt)*) => {
-        $crate::io::_print_fmt_log($crate::io::LogLevel::INFO, core::format_args!($($arg)*));
+        $crate::io::_print_fmt_log($crate::io::LogLevel::INFO, core::format_args!($($arg)*))
     };
 }
 
@@ -196,6 +196,7 @@ pub fn _print_fmt_str(args: core::fmt::Arguments) {
     use core::fmt::Write;
     let mut writer = Writer::new();
     let _ = writer.write_fmt(args);
+    crate::idt::init_idt();
 }
 
 pub fn _print_fmt_log(level: LogLevel, args: core::fmt::Arguments) {
