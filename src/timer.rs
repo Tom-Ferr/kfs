@@ -8,6 +8,7 @@ const FREQ: u32 = 100;
 fn timer(_regs: *const IntReg){
     unsafe{
         TICKS += 1;
+        // schedule();
     }
 }
 
@@ -22,13 +23,21 @@ pub fn init_timer(){
     }
 }
 
-pub fn schedule(time: usize){
+pub fn sleep(){
+    let time = 18 * 60;
     unsafe{
-        let target = TICKS + time;
+        let target = TICKS + (time as usize);
         while TICKS < target {}
-        asm!("
+    }
+}
+
+fn schedule(){
+    unsafe{
+        if TICKS % (18 * 60) == 0{
+            asm!("
             mov eax, 1
             int 0x80
-        ")
+            ")
+        }
     }
 }
