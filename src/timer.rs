@@ -31,6 +31,7 @@ pub fn sleep(){
     }
 }
 
+#[allow(dead_code)]
 fn schedule(){
     unsafe{
         if TICKS % (18 * 60) == 0{

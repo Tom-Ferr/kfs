@@ -27,7 +27,10 @@ RUST_PATH = $$HOME/.cargo/bin/
 %.o: %.s		
 		${ASM} ${ASM_FLAGS} $< -o $@
 
-all: install ${NAME}
+all: sudo install ${NAME}
+
+sudo:
+	@sudo echo -n
 
 install: check-rust-nightly check-xorriso check-qemu check-grub-mkrescue check-grub-pc-bin
 
