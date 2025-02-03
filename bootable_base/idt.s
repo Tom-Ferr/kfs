@@ -7,8 +7,6 @@ idt_flush:
     sti
     ret
 
-global panic_halt
-
 %macro ISR_NOERRCODE 1
     global isr%1
     isr%1:
