@@ -146,6 +146,7 @@ impl InterruptGuard{
     fn clear(){
         unsafe{asm!("cli");}
     }
+    #[allow(dead_code)]
     fn set(){
         unsafe{asm!("sti");}
     }
@@ -155,7 +156,6 @@ impl InterruptGuard{
 impl Drop for InterruptGuard{
     fn drop(&mut self){
         init_idt();
-        InterruptGuard::set();
     }
 }
 

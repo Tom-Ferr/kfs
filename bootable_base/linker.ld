@@ -34,6 +34,7 @@ SECTIONS {
 
     .kernel_data ALIGN (0x1000) : AT(ADDR(.kernel_data)-0xC0000000)
     {
+        *(.data)
         *(.data.*)
     }
 

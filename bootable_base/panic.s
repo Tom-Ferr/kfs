@@ -1,9 +1,6 @@
 section .panic
 global panic_halt
 
-stack_pointer dd 0
-stack_backup resb 4096
-
 panic_halt:
     cli
 .save_stack:
@@ -24,3 +21,10 @@ panic_halt:
 .halt:
     hlt
     jmp .halt
+
+section .data
+stack_pointer dd 0
+
+section .bss
+stack_backup:
+    resb 4096
