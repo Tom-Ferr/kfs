@@ -99,7 +99,7 @@ fn vmap(nbytes: usize, vaddr: u32) -> Result<(),()> {
                 let tab_index = (ptr >> 12 & 0x3FF) as usize;
                 let dir_index = (ptr >> 22) as usize;
                 let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
-                tab.set_frame(tab_index, addr - 0xC0000000);
+                tab.set_frame(tab_index, addr - 0xC0000000, 0x3);
                 ptr += FRAME_SIZE;
             }
             else{

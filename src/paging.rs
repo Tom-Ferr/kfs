@@ -52,8 +52,8 @@ impl PageTable {
         (frame & 0xfffff000) + 0xC0000000
     }
 
-    pub fn set_frame(&mut self, index: usize, value: u32){
-        self.pages.data[index] = value | 0x3;
+    pub fn set_frame(&mut self, index: usize, value: u32, flags: u32){
+        self.pages.data[index] = value | flags;
     }
 
     pub fn print_bitmap(&self){
@@ -104,16 +104,22 @@ pub struct PageDirectory {
 
 #[allow(dead_code)]
 impl PageDirectory {
-    const fn new(user: UserSpace) -> Self {
-        Self {
-            directory: &mut AlignedPage::new() as *mut AlignedPage,
-            whoami: user,
-            allocs: 0,
-            virtual_allocs: 0,
+    pub fn init(&mut self, addr: u32) {
+        let usr = addr as *mut AlignedPage;
+        
+        unsafe{
+            #[allow(static_mut_refs)]
+            let kern = (*DIR.as_mut().unwrap()).directory;
+            (*usr).data = (*kern).data;
         }
+        
+        self.directory = usr;
+        self.whoami = UserSpace::User;
+        self.allocs = 0;
+        self.virtual_allocs = 0;
     }
 
-    const fn init(ptr: *const u32) -> Self{
+    const fn new(ptr: *const u32) -> Self{
         let aligned_page = ptr as *mut AlignedPage;
         unsafe {
             let pt: &mut PageTable = &mut*((*aligned_page).get_data(UserSpace::Kernel as usize) as *mut PageTable);
@@ -146,9 +152,9 @@ impl PageDirectory {
         self.whoami as usize
     }
 
-    pub fn set_page(&mut self, index: usize, value: u32){
+    pub fn set_page(&mut self, index: usize, value: u32, flags: u32){
         unsafe{
-            (*self.directory).data[self.whoami as usize + index] = (value - 0xC0000000) | 0x3;
+            (*self.directory).data[self.whoami as usize + index] = (value - 0xC0000000) | flags;
         }
     }
 
@@ -164,11 +170,11 @@ impl PageDirectory {
         addr += (self.allocs + 1 * 0x400000) as u32;
 
         for i in 0..1024 {
-            new_page.set_frame(i, addr);
+            new_page.set_frame(i, addr, 0x3);
             addr += 4096;
         }
         new_page.bitmap[31] |= 0b11 << 30; //1022 % 32 = 30
-        self.set_page(self.allocs + 1, (new_page as *const PageTable) as u32);
+        self.set_page(self.allocs + 1, (new_page as *const PageTable) as u32, 0x3);
         self.allocs += 1;
         Ok(())
     }
@@ -178,7 +184,7 @@ impl PageDirectory {
             if let Some(page) = alloc_page(size_of::<PageTable>()){
                 let pg = page as *mut PageTable;
                 pg.write_volatile(PageTable {pages: AlignedPage::new(), bitmap: [0; 32],});
-                self.set_page(UserSpace::Virtual as usize + offset, page);
+                self.set_page(UserSpace::Virtual as usize + offset, page, 0x3);
                 self.virtual_allocs += 1;
             }
             else{
@@ -289,6 +295,6 @@ pub fn block_pages(addr: u32, len: u32){
 pub fn init_page_tables(){
     unsafe{
         let dir = (crate::get_reg!(cr3) as u32 + 0xC0000000) as *const u32;
-        DIR = Some(PageDirectory::init(dir));
+        DIR = Some(PageDirectory::new(dir));
     }
 }
