@@ -1,5 +1,5 @@
+use crate::get_reg;
 
-#[derive(Copy, Clone, Default)]
 #[repr(C, packed)]
 pub struct TSS {
 	prev_tss: u32,
@@ -32,23 +32,56 @@ pub struct TSS {
 }
 
 impl TSS{
-    pub const new() -> Self {
-        let ret = TSS::default();
+	const fn new() -> Self {
+		Self {
+			prev_tss: 0,
+			esp0: 0,
+			ss0: 0,
+			esp1: 0,
+			ss1: 0,
+			esp2: 0,
+			ss2: 0,
+			cr3: 0,
+			eip: 0,
+			eflags: 0,
+			eax: 0,
+			ecx: 0,
+			edx: 0,
+			ebx: 0,
+			esp: 0,
+			ebp: 0,
+			esi: 0,
+			edi: 0,
+			es: 0,
+			cs: 0,
+			ss: 0,
+			ds: 0,
+			fs: 0,
+			gs: 0,
+			ldt: 0,
+			trap: 0,
+			iomap: 0,
+		}
+	}
+	
+    pub fn init(&mut self) {
 
-        ret.ss0 = 0x18;
-        ret.esp0 = unsafe {get_reg!(esp)};
+        self.ss0 = 0x18;
+        self.esp0 = unsafe {get_reg!(esp)} as u32;
 
-        ret.iomap = size_of::<TSS>();
+        self.iomap = size_of::<TSS>() as u16;
 
-        ret.cs = 0x0b;
-        ret.ss = 0x1b;
-        ret.es = 0x13;
-        ret.ds = 0x13;
-        ret.fs = 0x13;
-        ret.gs = 0x13;
-
-        ret
+        self.cs = 0x0b;
+        self.ss = 0x1b;
+        self.es = 0x13;
+        self.ds = 0x13;
+        self.fs = 0x13;
+        self.gs = 0x13;
     }
+
+	pub fn as_ref(&self) -> &Self {
+		self
+	}
 }
 
-pub static _TSS: TSS = TSS::new();
+pub static mut  _TSS: TSS = TSS::new();

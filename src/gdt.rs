@@ -1,4 +1,5 @@
 use core::mem::size_of;
+use crate::tss::*;
 
 const GDT_ADDR: u32 = 0xC0000800;
 
@@ -38,18 +39,25 @@ struct GdtEntries{
     user_code: GdtDescriptor,
     user_data: GdtDescriptor,
     user_stack: GdtDescriptor,
+    tss: GdtDescriptor,
 }
 
 impl GdtEntries {
     fn new() -> Self {
-        Self{
-            null_desciptor: GdtDescriptor::new(0x0, 0x0, 0x0, 0x0),
-            kernel_code: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0x9A, 0xCF),
-            kernel_data: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0x92, 0xCF),
-            kernel_stack: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0x96, 0xCF),
-            user_code: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0xFA, 0xCF),
-            user_data: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0xF2, 0xCF),
-            user_stack: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0xF6, 0xCF),
+        unsafe{
+
+            let tss_addr: u32 = _TSS.as_ref() as *const TSS as u32;
+            let tss_size: u32 = size_of::<TSS>() as u32 - 1;
+            Self{
+                null_desciptor: GdtDescriptor::new(0x0, 0x0, 0x0, 0x0),
+                kernel_code: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0x9A, 0xCF),
+                kernel_data: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0x92, 0xCF),
+                kernel_stack: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0x96, 0xCF),
+                user_code: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0xFA, 0xCF),
+                user_data: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0xF2, 0xCF),
+                user_stack: GdtDescriptor::new(0x0, 0xFFFFFFFF, 0xF6, 0xCF),
+                tss: GdtDescriptor::new(tss_addr, tss_addr+tss_size, 0x89, 0xCF),
+            }
         }
     }
 }
@@ -70,9 +78,10 @@ impl Gdtr {
 }
 
 pub fn init_gdt() {
-    let gdt_entries = GdtEntries::new();
     
     unsafe{
+        _TSS.init();
+        let gdt_entries = GdtEntries::new();
         let gdt_addr = GDT_ADDR as *mut GdtEntries;
         gdt_addr.write_volatile(gdt_entries); // safer then *gdt_addr = gdt_entries;
         let gdtr = Gdtr::new(gdt_addr);
