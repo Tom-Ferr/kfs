@@ -108,8 +108,9 @@ impl PageDirectory {
         let usr = addr as *mut AlignedPage;
         
         unsafe{
+            let _ = crate::idt::InterruptGuard::new();
             #[allow(static_mut_refs)]
-            let kern = (*DIR.as_mut().unwrap()).directory;
+            let kern = (*DIR.as_ref().unwrap()).directory;
             (*usr).data = (*kern).data;
         }
         
@@ -146,6 +147,10 @@ impl PageDirectory {
 
     pub fn get_virtual_allocs(&self) -> usize{
         self.virtual_allocs
+    }
+
+    pub fn get_directory(&self) -> usize{
+        self.directory as usize
     }
 
     pub fn get_whoami(&self) -> usize{
@@ -289,6 +294,22 @@ pub fn block_pages(addr: u32, len: u32){
             }
             
         }
+    }
+}
+
+pub fn get_physical_addr(vaddr: usize) -> u32 {
+    let dir_index = vaddr >> 22;
+    let tab_index = (vaddr >> 12) & 0x3FF;
+    let offset = vaddr & 0xFFF;
+
+    unsafe{
+        #[allow(static_mut_refs)]
+        let dir = DIR.as_mut().unwrap();
+        
+        let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
+        let frame = tab.get_frame(tab_index) - 0xC0000000;
+        
+        frame + offset as u32
     }
 }
 

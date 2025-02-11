@@ -16,6 +16,8 @@ mod idt;
 mod timer;
 mod keyboard;
 mod syscalls;
+mod tss;
+mod procs;
 
 use screens::render;
 use gdt::init_gdt;
@@ -37,6 +39,18 @@ extern "C" {
     static kernel_start: u32;
     static kernel_end: u32;
     fn panic_halt() -> !;
+    fn switch_to_user_mode(esp: u32, eip: u32);
+}
+
+#[no_mangle]
+fn test() -> ! {
+    unsafe{
+        core::arch::asm!("
+        mov eax, 1
+        int 0x80
+        ");
+    }
+    loop{}
 }
 
 #[no_mangle]
@@ -54,6 +68,20 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
         init_page_tables();
         if let Err(..) = apply_mmap_info(multiboot_info + 0xC0000000, ks, ke){
             panic!();
+        }
+
+        use crate::procs::*;
+        use crate::paging::*;
+        use crate::malloc::*;
+        use core::arch::asm;
+
+        if let Some(my_proc) = PocessControlBlock::new(0xC0000000, ke + 0xC0000000){
+            let dir = (*my_proc).get_dir() - 0xC0000000;
+            asm!("mov cr3, {}", in(reg) dir);
+
+            let addr = test as u32 - 0xc0000000;
+
+            switch_to_user_mode(0xBFFFFFFC as u32, addr);
         }
     }
 
