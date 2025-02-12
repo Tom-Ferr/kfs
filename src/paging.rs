@@ -313,6 +313,34 @@ pub fn get_physical_addr(vaddr: usize) -> u32 {
     }
 }
 
+pub fn map_code(dest: *mut PageDirectory, src: u32, size: u32) -> Result<(),()> {
+    let mut f = src & 0xFFFFF000;
+    let code_npage = ((size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
+    let code_end = src + size;
+    for i in 0..code_npage
+    {
+        unsafe{
+
+            if let Some(p) = alloc_page(0x1000) {
+                (*dest).set_page(i as usize, p, 0x5);
+                let tb = p as *mut PageTable;
+                for i in 0..1024
+                {
+                    (*tb).set_frame(i as usize, (f - 0xC0000000), 0x5);
+                    f += FRAME_SIZE;
+                    if f >= code_end{
+                        break;
+                    }
+                }
+            }
+            else{
+                return Err(());
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn init_page_tables(){
     unsafe{
         let dir = (crate::get_reg!(cr3) as u32 + 0xC0000000) as *const u32;

@@ -1,6 +1,12 @@
 use crate::malloc::{kmalloc, kfree};
 use crate::paging::*;
+use core::arch::asm;
+
 const MAX_THREAD: usize = 5;
+
+extern "C" {
+    fn switch_to_user_mode(esp: u32, eip: u32);
+}
 
 #[derive(Copy, Clone)]
 enum ProcStatus{
@@ -24,12 +30,12 @@ pub struct PocessControlBlock {
 
 impl PocessControlBlock {
 
-    pub fn new(code_init: u32, code_end: u32) -> Option<*const Self> {
+    pub fn new(code_init: u32, code_size: u32) -> Option<*const Self> {
         if let Some(addr) = kmalloc(size_of::<PocessControlBlock>()) {
             let ptr = addr as *mut Self;
             unsafe{
 
-                if let Ok(..) = (*ptr).init(code_init, code_end){
+                if let Ok(..) = (*ptr).init(code_init, code_size){
                     return Some(ptr);
                 }
             }
@@ -37,10 +43,8 @@ impl PocessControlBlock {
         None
     }
 
-    fn init(&mut self, code_init: u32, code_end: u32) -> Result<(),()> {
+    fn init(&mut self, code_init: u32, code_size: u32) -> Result<(),()> {
         let stack_size = 0x1000;
-        let code_size = code_end - code_init;
-        let code_npage = ((code_size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
         let stack_npage = ((stack_size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
         let stack_frame = FRAME_SIZE;
         let bytes_array: [u32; 4] = [size_of::<PageDirectory>() as u32, FRAME_SIZE, (stack_npage * (size_of::<PageTable>() as u32)), stack_frame];
@@ -61,24 +65,8 @@ impl PocessControlBlock {
 
             let stack = ptr_array[2];
             
-            let mut f = code_init & 0xFFFFF000;
-            for i in 0..code_npage
-            {
-                if let Some(p) = alloc_page(0x1000) {
-                    (*dir_ptr).set_page(i as usize, p, 0x5);
-                    let tb = p as *mut PageTable;
-                    for i in 0..1024
-                    {
-                        (*tb).set_frame(i as usize, (f - 0xC0000000), 0x5);
-                        f += FRAME_SIZE;
-                        if f >= code_end{
-                            break;
-                        }
-                    }
-                }
-                else{
-                    return Err(());
-                }
+            if let Err(..) = map_code(dir_ptr, code_init, code_size){
+                return Err(());
             }
 
             let tb = stack as *mut PageTable;
@@ -147,4 +135,22 @@ struct TrapFrame {
     ecx: u32,
     edx: u32,
     flags: u32,
+}
+
+pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
+    if let Some(my_proc) = PocessControlBlock::new(start, size){
+        unsafe{
+
+            let dir = (*my_proc).get_dir() - 0xC0000000;
+            asm!("mov cr3, {}", in(reg) dir);
+            
+            let physical_addr = func - 0xc0000000;
+            
+            switch_to_user_mode(0xBFFFFFFC as u32, physical_addr);
+        }
+    }
+    else{
+        return Err(());
+    }
+    Ok(())
 }

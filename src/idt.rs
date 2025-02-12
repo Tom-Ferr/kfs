@@ -134,6 +134,26 @@ impl IntReg{
     pub fn get_eax(&self) -> u32 {
         self.eax
     }
+
+    pub fn get_ebx(&self) -> u32 {
+        self.ebx
+    }
+
+    pub fn get_ecx(&self) -> u32 {
+        self.ecx
+    }
+
+    pub fn get_edx(&self) -> u32 {
+        self.edx
+    }
+
+    pub fn get_esi(&self) -> u32 {
+        self.esi
+    }
+
+    pub fn get_edi(&self) -> u32 {
+        self.edi
+    }
 }
 
 pub struct InterruptGuard {}

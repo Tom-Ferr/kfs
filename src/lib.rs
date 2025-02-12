@@ -26,6 +26,7 @@ use multiboot::apply_mmap_info;
 use idt::init_idt;
 use timer::init_timer;
 use keyboard::init_keyboard;
+use crate::procs::exec_fn;
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -39,7 +40,6 @@ extern "C" {
     static kernel_start: u32;
     static kernel_end: u32;
     fn panic_halt() -> !;
-    fn switch_to_user_mode(esp: u32, eip: u32);
 }
 
 #[no_mangle]
@@ -70,19 +70,7 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
             panic!();
         }
 
-        use crate::procs::*;
-        use crate::paging::*;
-        use crate::malloc::*;
-        use core::arch::asm;
-
-        if let Some(my_proc) = PocessControlBlock::new(0xC0000000, ke + 0xC0000000){
-            let dir = (*my_proc).get_dir() - 0xC0000000;
-            asm!("mov cr3, {}", in(reg) dir);
-
-            let addr = test as u32 - 0xc0000000;
-
-            switch_to_user_mode(0xBFFFFFFC as u32, addr);
-        }
+        exec_fn(0xC0000000, test as u32, ke);
     }
 
     render();
