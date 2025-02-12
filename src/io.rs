@@ -18,7 +18,7 @@ pub const VGA_BUFFER: u32 = 0xC00B8000;
 #[allow(dead_code)]
 macro_rules! printf {
     ($($arg:tt)*) => {
-        $crate::io::_print_fmt_str(core::format_args!($($arg)*))
+        $crate::io::call_print_fmt_str(core::format_args!($($arg)*))
     };
 }
 #[macro_export]
@@ -193,8 +193,19 @@ impl fmt::Write for Writer {
     }
 }
 
+pub fn call_print_fmt_str(args: core::fmt::Arguments){
+    let ptr = &args as *const core::fmt::Arguments;
+    unsafe{
+
+        asm!("
+        mov eax, 1
+        int 0x80
+        ", in("ebx")ptr);
+    }
+}
+
 pub fn _print_fmt_str(args: core::fmt::Arguments) {
-    let _int = InterruptGuard::new();
+    // let _int = InterruptGuard::new();
     use core::fmt::Write;
     let mut writer = Writer::new();
     let _ = writer.write_fmt(args);
@@ -224,10 +235,40 @@ pub fn _print_fmt_log(level: LogLevel, args: core::fmt::Arguments) {
     }
 }
 
+unsafe fn __write(ptr: *const u8, len: u32){
+    asm!("
+        mov eax, 1
+        int 0x80
+    ", in("ebx")ptr, in("ecx")len);
+}
+
+pub fn call_write(string: &[u8]){
+    let ptr = string.as_ptr();
+    let len = string.len() as u32;
+    unsafe {__write(ptr, len)}
+}
+
 pub unsafe fn put_vga_char(byte: u8, offset: u32) {
         let vga_buffer = VGA_BUFFER as *mut u8;
         *vga_buffer.offset(offset as isize) = byte;
         *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | TEXT_COLOR;
+}
+
+pub fn put_vga_ptr(ptr: *const u8, len: u32) {
+
+    let mut offset = get_cursor();
+    for i in 0..len {
+        unsafe {
+            let byte = *(ptr.offset(i as isize));
+            if byte == b'\n' {
+                offset = move_offset_to_new_line(offset);
+                continue;
+            }
+            put_vga_char(byte, offset);
+            offset += 2;
+        }
+    }
+    set_cursor(offset);
 }
 
 pub fn put_vga_string(string: &[u8]) {

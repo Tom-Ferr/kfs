@@ -157,6 +157,10 @@ impl PageDirectory {
         self.whoami as usize
     }
 
+    pub fn set_whoami(&mut self, u: UserSpace) {
+        self.whoami = u;
+    }
+
     pub fn set_page(&mut self, index: usize, value: u32, flags: u32){
         unsafe{
             (*self.directory).data[self.whoami as usize + index] = (value - 0xC0000000) | flags;

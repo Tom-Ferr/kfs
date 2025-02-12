@@ -31,7 +31,10 @@ use crate::procs::exec_fn;
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     if let Some(location) = _info.location() {
-        printk!(ERROR, "{}, {}", location, _info.message());
+        unsafe{
+            let cr2 = get_reg!(cr2) as u32;
+            printk!(ERROR, "{}, {}, {:x}", location, _info.message(), cr2);
+        }
     }
     unsafe { panic_halt(); }
 }
@@ -44,12 +47,10 @@ extern "C" {
 
 #[no_mangle]
 fn test() -> ! {
-    unsafe{
-        core::arch::asm!("
-        mov eax, 1
-        int 0x80
-        ");
-    }
+    printf!("Here");
+    printf!("There");
+    // let string: &[u8] = b"Hello World";
+    // crate::io::call_write(string);
     loop{}
 }
 

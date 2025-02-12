@@ -4,6 +4,8 @@ use core::arch::asm;
 
 const MAX_THREAD: usize = 5;
 
+pub static mut current_proc: Option<*mut PocessControlBlock> = None;
+
 extern "C" {
     fn switch_to_user_mode(esp: u32, eip: u32);
 }
@@ -30,7 +32,7 @@ pub struct PocessControlBlock {
 
 impl PocessControlBlock {
 
-    pub fn new(code_init: u32, code_size: u32) -> Option<*const Self> {
+    pub fn new(code_init: u32, code_size: u32) -> Option<*mut Self> {
         if let Some(addr) = kmalloc(size_of::<PocessControlBlock>()) {
             let ptr = addr as *mut Self;
             unsafe{
@@ -79,7 +81,7 @@ impl PocessControlBlock {
             self.state = ProcStatus::Runnable;
             let mut th = Thread::new();
             th.parent = self;
-            th.initialStack = stack as *const usize;
+            th.initialStack = 0xBFFFFFFC as *const usize;
             self.threads[0] = th;
             
         }
@@ -88,6 +90,25 @@ impl PocessControlBlock {
 
     pub fn get_dir(&self) -> usize {
         unsafe{(*self.dir).get_directory()}
+    }
+
+    pub fn set_eip(&mut self, eip: u32) {
+        self.threads[0].frame.eip = eip;
+    }
+
+    pub fn get_eip(&self) -> u32 {
+        self.threads[0].frame.eip
+    }
+
+    pub fn get_inital_stack(&self) -> u32 {
+        self.threads[0].initialStack as u32
+    }
+
+    pub fn set_space(&mut self, u: UserSpace){
+        unsafe{
+
+            (*self.dir).set_whoami(u);
+        }
     }
 }
 
@@ -144,9 +165,11 @@ pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
             let dir = (*my_proc).get_dir() - 0xC0000000;
             asm!("mov cr3, {}", in(reg) dir);
             
-            let physical_addr = func - 0xc0000000;
+            (*my_proc).set_eip(func - 0xc0000000);
+
+            current_proc = Some(my_proc);
             
-            switch_to_user_mode(0xBFFFFFFC as u32, physical_addr);
+            switch_to_user_mode((*my_proc).get_inital_stack(), (*my_proc).get_eip());
         }
     }
     else{
