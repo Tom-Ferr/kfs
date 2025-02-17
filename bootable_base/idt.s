@@ -135,6 +135,9 @@ irq_common:
     push esp
     call irq_handler
 
+    ;mov eax, [_currentTask]
+    ;mov esp, [eax]
+
     add esp, 8
     pop ebx
     mov ds, bx

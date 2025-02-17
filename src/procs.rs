@@ -4,7 +4,13 @@ use core::arch::asm;
 
 const MAX_THREAD: usize = 5;
 
-pub static mut current_proc: Option<*mut PocessControlBlock> = None;
+static mut PID: u32 = 0;
+
+pub static mut QUEUES: [ReadyQueue; 3] = [ReadyQueue::new(); 3];
+
+pub static mut CURRENT_PROC: Option<*const ProcessControlBlock> = None;
+pub static mut CURRENT_TASK: *mut Option<*const ProcessControlBlock> = unsafe{&mut CURRENT_PROC as *mut Option<*const ProcessControlBlock>};
+// pub static mut CURRENT_THREAD: Thread = Thread::new();
 
 extern "C" {
     fn switch_to_user_mode(esp: u32, eip: u32);
@@ -20,20 +26,86 @@ enum ProcStatus{
     Running,
 }
 
-pub struct PocessControlBlock {
+#[derive(Copy, Clone)]
+pub struct ReadyQueue{
+    head: Option<*const ProcessControlBlock>,
+    tail: Option<*const ProcessControlBlock>,
+}
+
+impl ReadyQueue{
+    pub const fn new() -> Self{
+        Self{
+            head: None,
+            tail: None,
+        }
+    }
+
+    pub fn insert(&mut self, new: *mut ProcessControlBlock){
+        if self.head.is_none(){
+            self.head = Some(new);
+            self.tail = self.head;
+        }
+        else{
+            unsafe{
+                let tail = *self.tail.as_mut().unwrap() as *mut ProcessControlBlock;
+                let head = *self.head.as_ref().unwrap();
+                
+                (*new).next = head;
+                (*tail).next = new;
+                self.tail = Some(new);
+            }
+        }   
+    }
+
+    pub fn remove(&mut self){
+        if !self.head.is_none(){
+            unsafe{
+                let head = *self.head.as_ref().unwrap();
+                self.head = Some((*head).next);
+            }
+        }
+    }
+
+    pub fn roll(&mut self){
+        unsafe{
+            let head = *self.head.as_mut().unwrap() as *mut ProcessControlBlock;
+            self.remove();
+            self.insert(head);
+        }
+    }
+
+    pub fn get(&self) -> Option<*const ProcessControlBlock>{
+        self.head
+    }
+
+    pub fn is_empty(&self) -> bool{
+        self.tail.is_none()
+    }
+}
+
+pub struct ProcessControlBlock {
     pid: u32,
     priority: u32,
     dir: *mut PageDirectory,
     state: ProcStatus,
-    // next: *const PocessControlBlock,
+    next: *const ProcessControlBlock,
+    code_text: u32,
+    code_data: u32,
+    code_bss: u32,
+    code_size: u32,
+    // thread_count: u32,
     // threadList: *const Thread,
-    threads: [Thread; MAX_THREAD],
+    // threads: [Thread; MAX_THREAD],
+    esp: u32,
+    ss:  u32,
+    kernel_esp: u32,
+    kernel_ss: u32,
 }
 
-impl PocessControlBlock {
+impl ProcessControlBlock {
 
     pub fn new(code_init: u32, code_size: u32) -> Option<*mut Self> {
-        if let Some(addr) = kmalloc(size_of::<PocessControlBlock>()) {
+        if let Some(addr) = kmalloc(size_of::<ProcessControlBlock>()) {
             let ptr = addr as *mut Self;
             unsafe{
 
@@ -75,14 +147,17 @@ impl PocessControlBlock {
             (*tb).set_frame(1023, ptr_array[3] - 0xC0000000, 0x7);
             (*dir_ptr).set_page(UserSpace::Kernel as usize - 1, stack, 0x7);
 
-            self.pid = 1;
+            PID += 1;
+            self.pid = PID;
             self.priority = 1;
             self.dir = dir_ptr;
             self.state = ProcStatus::Runnable;
-            let mut th = Thread::new();
-            th.parent = self;
-            th.initialStack = 0xBFFFFFFC as *const usize;
-            self.threads[0] = th;
+            self.code_text = code_init;
+            self.code_size = code_size;
+            // let mut th = Thread::new();
+            // th.parent = self;
+            // self.threads[0] = th;
+            // self.thread_count = 1;
             
         }
         Ok(())
@@ -92,84 +167,79 @@ impl PocessControlBlock {
         unsafe{(*self.dir).get_directory()}
     }
 
-    pub fn set_eip(&mut self, eip: u32) {
-        self.threads[0].frame.eip = eip;
-    }
-
-    pub fn get_eip(&self) -> u32 {
-        self.threads[0].frame.eip
-    }
-
-    pub fn get_inital_stack(&self) -> u32 {
-        self.threads[0].initialStack as u32
-    }
-
     pub fn set_space(&mut self, u: UserSpace){
         unsafe{
 
             (*self.dir).set_whoami(u);
         }
     }
+
+    pub fn set_esp(&mut self, esp: u32){
+        self.esp = esp;
+    }
+
+    pub fn get_esp(&mut self) -> u32{
+        self.esp
+    }
 }
 
-impl Drop for PocessControlBlock {
+impl Drop for ProcessControlBlock {
     fn drop(&mut self) {
         // kfree(self.dir as u32);
         kfree(self as *const Self as u32);
     }
 }
 
-#[derive(Copy, Clone)]
-struct Thread {
-    parent: *const PocessControlBlock,
-    initialStack: *const usize,
-    stackLimit: *const usize,
-    kernelStack: *const usize,
-    priority: u32,
-    state: ProcStatus,
-    frame: TrapFrame,
-}
+// #[derive(Copy, Clone)]
+// struct Thread {
+//     esp: u32,
+//     ss:  u32,
+//     kernel_esp: u32,
+//     kernel_ss: u32,
+//     parent: *const ProcessControlBlock,
+//     priority: u32,
+//     state: ProcStatus,
+// }
 
-impl Thread {
-    fn new() -> Self {
-        Self{
-            parent: 0x0 as *const PocessControlBlock,
-            initialStack: 0x0 as *const usize,
-            stackLimit: 0x0 as *const usize,
-            kernelStack: 0x0 as *const usize,
-            priority: 1,
-            state: ProcStatus::Runnable,
-            frame: TrapFrame::default(),
-        }
-    }
-}
+// impl Thread {
+//     fn new() -> Self {
+//         Self{
+//             esp: 0,
+//             ss: 0,
+//             kernel_esp: 0,
+//             kernel_ss: 0,
+//             parent: 0x0 as *const ProcessControlBlock,
+//             priority: 1,
+//             state: ProcStatus::Runnable,
+//         }
+//     }
+// }
 
-#[derive(Default, Copy, Clone)]
-struct TrapFrame {
-    esp: u32,
-    ebp: u32,
-    eip: u32,
-    edi: u32,
-    esi: u32,
-    eax: u32,
-    ebx: u32,
-    ecx: u32,
-    edx: u32,
-    flags: u32,
-}
+// #[derive(Default, Copy, Clone)]
+// struct TrapFrame {
+//     eax: u32,
+//     ebx: u32,
+//     ecx: u32,
+//     edx: u32,
+//     esi: u32,
+//     edi: u32,
+//     esp: u32,
+//     ebp: u32,
+//     eip: u32,
+//     cs: u32,
+//     flags: u32,
+// }
 
 pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
-    if let Some(my_proc) = PocessControlBlock::new(start, size){
+    if let Some(my_proc) = ProcessControlBlock::new(start, size){
         unsafe{
 
             let dir = (*my_proc).get_dir() - 0xC0000000;
             asm!("mov cr3, {}", in(reg) dir);
-            
-            (*my_proc).set_eip(func - 0xc0000000);
 
-            current_proc = Some(my_proc);
+            CURRENT_PROC = Some(my_proc);
             
-            switch_to_user_mode((*my_proc).get_inital_stack(), (*my_proc).get_eip());
+            switch_to_user_mode(0xBFFFFFFC, func - 0xc0000000);
         }
     }
     else{

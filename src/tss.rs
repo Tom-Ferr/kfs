@@ -82,6 +82,19 @@ impl TSS{
 	pub fn as_ref(&self) -> &Self {
 		self
 	}
+
+	pub fn set_ss0(&mut self, kernel_ss: u32){
+		self.ss0 = kernel_ss;
+	}
+
+	pub fn set_esp0(&mut self, kernel_esp: u32){
+		self.esp0 = kernel_esp;
+	}
+
+	pub fn set_stack(&mut self, kernel_ss: u32, kernel_esp: u32){
+		self.set_ss0(kernel_ss);
+		self.set_esp0(kernel_esp);
+	}
 }
 
 pub static mut  _TSS: TSS = TSS::new();

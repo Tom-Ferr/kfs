@@ -47,8 +47,7 @@ extern "C" {
 
 #[no_mangle]
 fn test() -> ! {
-    printf!("Here");
-    printf!("There");
+    printf!("Welcome to User Land");
     // let string: &[u8] = b"Hello World";
     // crate::io::call_write(string);
     loop{}

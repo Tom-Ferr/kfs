@@ -235,17 +235,10 @@ pub fn _print_fmt_log(level: LogLevel, args: core::fmt::Arguments) {
     }
 }
 
-unsafe fn __write(ptr: *const u8, len: u32){
-    asm!("
-        mov eax, 1
-        int 0x80
-    ", in("ebx")ptr, in("ecx")len);
-}
-
 pub fn call_write(string: &[u8]){
     let ptr = string.as_ptr();
     let len = string.len() as u32;
-    unsafe {__write(ptr, len)}
+    unsafe {crate::syscalls::write(ptr, len)}
 }
 
 pub unsafe fn put_vga_char(byte: u8, offset: u32) {

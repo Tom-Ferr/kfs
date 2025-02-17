@@ -1,5 +1,7 @@
 use crate::io::outb;
 use crate::idt::{install_irq_routine, IntReg};
+use crate::get_reg;
+use crate::procs::*;
 use core::arch::asm;
 
 static mut TICKS: usize = 0;
@@ -7,8 +9,8 @@ const FREQ: u32 = 100;
 
 fn timer(_regs: *const IntReg){
     unsafe{
+        // schedule(_regs);
         TICKS += 1;
-        // schedule();
     }
 }
 
@@ -32,13 +34,19 @@ pub fn sleep(){
 }
 
 #[allow(dead_code)]
-fn schedule(){
+fn schedule(_regs: *const IntReg){
     unsafe{
-        if TICKS % (18 * 60) == 0{
-            asm!("
-            mov eax, 1
-            int 0x80
-            ")
+        if TICKS % 10 == 0{
+            {
+                let current_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
+                (*current_task).set_esp(get_reg!(esp) as u32);
+                QUEUES[0].roll();
+            }
+            let head = QUEUES[0].get();
+            CURRENT_PROC = head;
+            let current_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
+            asm!("mov esp, {}", in(reg)(*current_task).get_esp());
+            
         }
     }
 }

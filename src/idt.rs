@@ -124,7 +124,7 @@ pub struct IntReg{
     int_no: u32,
     err_code: u32,
     eip: u32,
-    csm: u32,
+    cs: u32,
     eflags: u32,
     useresp: u32,
     ss: u32,
@@ -269,6 +269,9 @@ pub extern "C" fn irq_handler(regs: *const IntReg){
 #[no_mangle]
 pub extern "C" fn isr_handler(regs: *const IntReg){
     unsafe{
+        // let proc = crate::procs::current_proc.as_mut().unwrap();
+        // (**proc).set_space(crate::paging::UserSpace::Kernel);
+
         let err_code = (*regs).err_code;
         match (*regs).int_no {
 
