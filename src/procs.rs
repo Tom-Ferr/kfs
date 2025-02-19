@@ -90,10 +90,12 @@ pub struct ProcessControlBlock {
     state: ProcStatus,
     next: *const ProcessControlBlock,
     parent: *const ProcessControlBlock,
+    child: *const ProcessControlBlock,
     code_text: u32,
     code_data: u32,
     code_bss: u32,
     code_size: u32,
+    heap: u32,
     // thread_count: u32,
     // threadList: *const Thread,
     // threads: [Thread; MAX_THREAD],
@@ -155,6 +157,7 @@ impl ProcessControlBlock {
             self.state = ProcStatus::Runnable;
             self.code_text = code_init;
             self.code_size = code_size;
+            self.heap = code_init + code_size;
             // let mut th = Thread::new();
             // th.parent = self;
             // self.threads[0] = th;

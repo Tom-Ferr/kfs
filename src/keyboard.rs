@@ -1,5 +1,7 @@
 use crate::idt::{install_irq_routine, IntReg};
 use crate::io::read_key;
+use crate::key_handlers::*;
+use crate::io::get_cursor;
 
 pub static mut SHIFT_PRESSED: u8 = 0b0;
 pub static mut CURRENT_LAYOUT: [u8; 94] = QWERTY_LAYOUT;
@@ -49,6 +51,7 @@ pub fn set_qwerty(){
 
 fn keyboard_handler(_regs: *const IntReg){
     let scan_code = read_key();
+    let mut offset = get_cursor();
     unsafe{
         if scan_code == L_SHIFT || scan_code == R_SHIFT{
             SHIFT_PRESSED |= 0b1;
@@ -61,6 +64,15 @@ fn keyboard_handler(_regs: *const IntReg){
         }
         else if scan_code == R_ALT{
             SHIFT_PRESSED ^= 0b100
+        }
+        match scan_code{
+            0x0E => handle_backspace(&mut offset),
+            0x4B => handle_left_arrow(&mut offset),
+            0x4D => handle_right_arrow(&mut offset),
+            0x53 => handle_delete(&mut offset),
+            0x1C => handle_enter(&mut offset),
+            0x1D => handle_shortcuts(),
+            _ => handle_character(scan_code, SHIFT_PRESSED, &mut offset),
         }
     }
 }

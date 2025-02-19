@@ -3,6 +3,7 @@ use core::fmt;
 
 use crate::keyboard::{CURRENT_LAYOUT, ALT_LAYOUT, AZERTY_LAYOUT};
 use crate::idt::InterruptGuard;
+use crate::screens::CURRENT_SCREEN;
 use crate::utils;
 use crate::get_reg;
 
@@ -479,10 +480,12 @@ pub fn scroll_ln(offset: u32) -> u32 {
 pub fn stack_dump() {
     
     unsafe {
+        (*CURRENT_SCREEN).import();
         let stack_base = get_reg!(ebp);
         let stack_pointer = get_reg!(esp);
 
         memory_dump(stack_pointer, stack_base);
+        (*CURRENT_SCREEN).export();
     }
 
 }

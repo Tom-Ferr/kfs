@@ -19,7 +19,7 @@ mod syscalls;
 mod tss;
 mod procs;
 
-use screens::render;
+// use screens::render;
 use gdt::init_gdt;
 use paging::init_page_tables;
 use multiboot::apply_mmap_info;
@@ -47,7 +47,7 @@ extern "C" {
 
 #[no_mangle]
 fn test() -> ! {
-    printf!("Welcome to User Land");
+    // printf!("Welcome to User Land");
     // let string: &[u8] = b"Hello World";
     // crate::io::call_write(string);
     loop{}
@@ -61,6 +61,8 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
     init_timer();
     init_keyboard();
 
+    crate::io::clear_vga();
+
     unsafe{
         let ks = &kernel_start as *const u32 as u32;
         let ke = &kernel_end as *const u32 as u32 - 0xC0000000;
@@ -72,6 +74,5 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
 
         exec_fn(0xC0000000, test as u32, ke);
     }
-
-    render();
+    loop{}
 }

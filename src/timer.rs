@@ -43,6 +43,8 @@ unsafe fn switch_task(){
             if let Some(head) = QUEUES[next_priority].get(){
                 CURRENT_PROC = Some(head);
                 let next_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
+                let dir = (*next_task).get_dir() - 0xC0000000;
+                asm!("mov cr3, {}", in(reg) dir);
                 asm!("mov esp, {}", in(reg)(*next_task).get_esp());
                 break;
             }
