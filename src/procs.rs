@@ -3,10 +3,11 @@ use crate::paging::*;
 use core::arch::asm;
 
 const MAX_THREAD: usize = 5;
+pub const NUMBER_OF_QUEUES: usize = 3;
 
 static mut PID: u32 = 0;
 
-pub static mut QUEUES: [ReadyQueue; 3] = [ReadyQueue::new(); 3];
+pub static mut QUEUES: [ReadyQueue; NUMBER_OF_QUEUES] = [ReadyQueue::new(); NUMBER_OF_QUEUES];
 
 pub static mut CURRENT_PROC: Option<*const ProcessControlBlock> = None;
 pub static mut CURRENT_TASK: *mut Option<*const ProcessControlBlock> = unsafe{&mut CURRENT_PROC as *mut Option<*const ProcessControlBlock>};
@@ -44,6 +45,7 @@ impl ReadyQueue{
         if self.head.is_none(){
             self.head = Some(new);
             self.tail = self.head;
+            unsafe{(*new).next = new;}
         }
         else{
             unsafe{
@@ -67,28 +69,27 @@ impl ReadyQueue{
     }
 
     pub fn roll(&mut self){
-        unsafe{
-            let head = *self.head.as_mut().unwrap() as *mut ProcessControlBlock;
-            self.remove();
-            self.insert(head);
+        if !self.head.is_none(){
+            unsafe{
+                let head = *self.head.as_mut().unwrap() as *mut ProcessControlBlock;
+                self.remove();
+                self.insert(head);
+            }
         }
     }
 
     pub fn get(&self) -> Option<*const ProcessControlBlock>{
         self.head
     }
-
-    pub fn is_empty(&self) -> bool{
-        self.tail.is_none()
-    }
 }
 
 pub struct ProcessControlBlock {
     pid: u32,
-    priority: u32,
+    priority: usize,
     dir: *mut PageDirectory,
     state: ProcStatus,
     next: *const ProcessControlBlock,
+    parent: *const ProcessControlBlock,
     code_text: u32,
     code_data: u32,
     code_bss: u32,
@@ -178,9 +179,30 @@ impl ProcessControlBlock {
         self.esp = esp;
     }
 
-    pub fn get_esp(&mut self) -> u32{
+    pub fn set_parent(&mut self, parent: *const ProcessControlBlock){
+        self.parent = parent;
+    }
+
+    pub fn get_esp(&self) -> u32{
         self.esp
     }
+
+    pub fn get_text(&self) -> u32{
+        self.code_text
+    }
+
+    pub fn get_size(&self) -> u32{
+        self.code_size
+    }
+
+    pub fn get_priority(&self) -> usize{
+        self.priority
+    }
+
+    pub fn get_pid(&self) -> u32{
+        self.pid
+    }
+
 }
 
 impl Drop for ProcessControlBlock {
@@ -230,6 +252,28 @@ impl Drop for ProcessControlBlock {
 //     flags: u32,
 // }
 
+pub unsafe fn fork() -> Option<u32>{
+    let parent_proc = *CURRENT_PROC.as_ref().unwrap();
+    let start = (*parent_proc).get_text();
+    let size = (*parent_proc).get_size();
+    let parent_pid = (*parent_proc).get_pid();
+
+    if let Some(child_proc) = ProcessControlBlock::new(start, size){
+        unsafe{
+
+           //copy stack
+           //copy registers
+           (*child_proc).set_parent(parent_proc);
+        }
+        let current_proc = *CURRENT_PROC.as_ref().unwrap();
+        if (*current_proc).get_pid() == parent_pid {
+            return Some((*child_proc).get_pid());
+        }
+        return Some(0);
+    }
+    None
+}
+
 pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
     if let Some(my_proc) = ProcessControlBlock::new(start, size){
         unsafe{
@@ -238,6 +282,7 @@ pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
             asm!("mov cr3, {}", in(reg) dir);
 
             CURRENT_PROC = Some(my_proc);
+            QUEUES[(*my_proc).get_priority()].insert(my_proc);
             
             switch_to_user_mode(0xBFFFFFFC, func - 0xc0000000);
         }

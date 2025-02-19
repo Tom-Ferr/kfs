@@ -9,7 +9,7 @@ const FREQ: u32 = 100;
 
 fn timer(_regs: *const IntReg){
     unsafe{
-        // schedule(_regs);
+        schedule(_regs);
         TICKS += 1;
     }
 }
@@ -33,20 +33,28 @@ pub fn sleep(){
     }
 }
 
+unsafe fn switch_task(){
+    if let Some(_) = *CURRENT_TASK{
+        let current_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
+        (*current_task).set_esp(get_reg!(esp) as u32);
+        let current_priority = (*current_task).get_priority();
+        QUEUES[current_priority].roll();
+        for next_priority in 0..NUMBER_OF_QUEUES{
+            if let Some(head) = QUEUES[next_priority].get(){
+                CURRENT_PROC = Some(head);
+                let next_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
+                asm!("mov esp, {}", in(reg)(*next_task).get_esp());
+                break;
+            }
+        }
+    }
+}
+
 #[allow(dead_code)]
 fn schedule(_regs: *const IntReg){
     unsafe{
         if TICKS % 10 == 0{
-            {
-                let current_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
-                (*current_task).set_esp(get_reg!(esp) as u32);
-                QUEUES[0].roll();
-            }
-            let head = QUEUES[0].get();
-            CURRENT_PROC = head;
-            let current_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
-            asm!("mov esp, {}", in(reg)(*current_task).get_esp());
-            
+            switch_task();
         }
     }
 }
