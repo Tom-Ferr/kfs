@@ -47,7 +47,6 @@ fn check_virtual_space(nbytes: usize) -> Option<u32>{
             }
         }
         for offset in 0..=dir.get_virtual_allocs(){
-            let tab = &mut *(dir.get_page(UserSpace::Virtual as usize + offset as usize) as *mut PageTable);
             for i in 0..1024 {
                 let byte_index: usize = i / 32;
                 let bit_index: usize = i % 32;
@@ -64,7 +63,7 @@ fn check_virtual_space(nbytes: usize) -> Option<u32>{
                 }
                 
                 let target = cursor << bit_index;
-                if (tab.bitmap[byte_index] & target) == 0 {
+                if (BITMAP[UserSpace::Virtual as usize + offset as usize][byte_index] & target) == 0 {
                     if candidate == None{
                         candidate = Some(( (UserSpace::Virtual as usize + offset + dir.get_whoami()) << 22 | i << 10) as u32);
                     }

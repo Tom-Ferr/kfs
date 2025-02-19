@@ -4,6 +4,8 @@ pub static mut DIR: Option<PageDirectory> = None;
 
 pub const FRAME_SIZE: u32 = 0x1000;
 
+pub static mut BITMAP: [[u32;32];1024] = [[0;32];1024];
+
 #[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum UserSpace{
@@ -33,7 +35,6 @@ impl AlignedPage {
 #[repr(C, align(4096))]
 pub struct PageTable {
     pages: AlignedPage,
-    pub bitmap: [u32; 32],
 }
 
 #[allow(dead_code)]
@@ -41,8 +42,8 @@ impl PageTable {
     fn new(dir: &PageDirectory) -> &mut PageTable {
         unsafe{
             let pt: &PageTable = &*(dir.get_page(dir.get_allocs()) as *const PageTable);
-            let frame: *mut PageTable = pt.get_frame(1022) as *mut PageTable;
-            frame.write_volatile(Self {pages: AlignedPage::new(), bitmap: [0; 32],});
+            let frame: *mut PageTable = pt.get_frame(1023) as *mut PageTable;
+            frame.write_volatile(Self {pages: AlignedPage::new()});
             &mut(*frame)
         }
     }
@@ -54,43 +55,6 @@ impl PageTable {
 
     pub fn set_frame(&mut self, index: usize, value: u32, flags: u32){
         self.pages.data[index] = value | flags;
-    }
-
-    pub fn print_bitmap(&self){
-        clear_vga();
-        enable_cursor(false);
-        for i in 0..32{
-            crate::printf!("index: {:02}, {:032b}\n", i, self.bitmap[i as usize]);
-
-            if get_cursor() == 24 * 160 {
-                crate::printf!("Press \'ENTER\' to continue, \'ESC\' to quit");
-                loop{
-                    let scan_code = read_key();
-                    if scan_code == 0x01{
-                        clear_vga();
-                        set_cursor(0);
-                        enable_cursor(true);
-                        return ;
-                    }
-                    else if scan_code == 0x1C{
-                        clear_vga();
-                        set_cursor(0);
-                        break ;
-                    }
-                }
-            }
-        }
-
-        crate::printf!("Press \'ENTER\' to quit");
-        loop{
-            let scan_code = read_key();
-            if scan_code == 0x1C{
-                clear_vga();
-                set_cursor(0);
-                enable_cursor(true);
-                break ;
-            }
-        }
     }
 }
 
@@ -123,8 +87,7 @@ impl PageDirectory {
     const fn new(ptr: *const u32) -> Self{
         let aligned_page = ptr as *mut AlignedPage;
         unsafe {
-            let pt: &mut PageTable = &mut*((*aligned_page).get_data(UserSpace::Kernel as usize) as *mut PageTable);
-            pt.bitmap[31] |= 0b11 << 30;
+            BITMAP[UserSpace::Kernel as usize][31] |= 1 << 31;
         }
         Self {
             directory: aligned_page,
@@ -182,7 +145,7 @@ impl PageDirectory {
             new_page.set_frame(i, addr, 0x3);
             addr += 4096;
         }
-        new_page.bitmap[31] |= 0b11 << 30; //1022 % 32 = 30
+        unsafe {BITMAP[self.allocs + 1 + UserSpace::Kernel as usize][31] |= 1 << 31};
         self.set_page(self.allocs + 1, (new_page as *const PageTable) as u32, 0x3);
         self.allocs += 1;
         Ok(())
@@ -192,7 +155,7 @@ impl PageDirectory {
         unsafe{
             if let Some(page) = alloc_page(size_of::<PageTable>()){
                 let pg = page as *mut PageTable;
-                pg.write_volatile(PageTable {pages: AlignedPage::new(), bitmap: [0; 32],});
+                pg.write_volatile(PageTable {pages: AlignedPage::new()});
                 self.set_page(UserSpace::Virtual as usize + offset, page, 0x3);
                 self.virtual_allocs += 1;
             }
@@ -228,15 +191,15 @@ pub fn alloc_page(nbytes: usize) -> Option<u32> {
                 }
                 
                 let target = cursor << bit_index;
-                if (tab.bitmap[byte_index] & target) == 0 {
-                    tab.bitmap[byte_index] |= target;
+                if (BITMAP[offset as usize + UserSpace::Kernel as usize][byte_index] & target) == 0 {
+                    BITMAP[offset as usize + UserSpace::Kernel as usize][byte_index] |= target;
                     return Some(tab.get_frame(i));
                 }
             }
         }
         if let Ok(..) = dir.new_page() {
             let tab = &mut *(dir.get_page(dir.get_allocs()) as *mut PageTable);
-            tab.bitmap[dir.get_allocs()] |= cursor;
+            BITMAP[dir.get_allocs() as usize + UserSpace::Kernel as usize][0] |= cursor;
             return Some(tab.get_frame(0));
         }
     }
@@ -250,12 +213,11 @@ pub fn free_page(ptr: u32) {
         #[allow(static_mut_refs)]
         let dir = DIR.as_mut().unwrap();
         let offset = ptr / 0x400000;
-        let tab = &mut*(dir.get_page(offset as usize) as *mut PageTable);
         let frame_index: usize = ((ptr / FRAME_SIZE) % 1024) as usize;
         let byte_index: usize = frame_index / 32;
         let bit_index: usize = frame_index % 32;
         
-        tab.bitmap[byte_index] &= !(1 << bit_index);
+        BITMAP[offset as usize + UserSpace::Kernel as usize][byte_index] &= !(1 << bit_index);
     }
 }
 
@@ -276,24 +238,23 @@ pub fn block_pages(addr: u32, len: u32){
         let end_byte_index = end_frame_index / 32;
 
         for offset in _begin_offset..=_end_offset{
-            let tab = &mut*(dir.get_page(offset as usize) as *mut PageTable);
             for byte_index in 0..32{
                 match offset{
                     _begin_offset if byte_index == begin_byte_index => {
                         let bit_index = begin_frame_index % 32;
-                        tab.bitmap[byte_index as usize] |= (!0) << bit_index;
+                        BITMAP[offset as usize + UserSpace::Kernel as usize][byte_index as usize] |= (!0) << bit_index;
                     },
    
                     _end_offset if byte_index == end_byte_index => {
                         let bit_index = end_frame_index % 32;
-                        tab.bitmap[byte_index as usize] |= !((!0) << bit_index + 1);
+                        BITMAP[offset as usize + UserSpace::Kernel as usize][byte_index as usize] |= !((!0) << bit_index + 1);
                     },
 
                     _begin_offset if byte_index < begin_byte_index => continue,
                     
                     _end_offset if byte_index > end_byte_index => break,
 
-                    _ => tab.bitmap[byte_index as usize] |= !0,
+                    _ => BITMAP[offset as usize + UserSpace::Kernel as usize][byte_index as usize] |= !0,
                 }
             }
             
