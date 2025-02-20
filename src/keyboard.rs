@@ -13,6 +13,8 @@ const R_SHIFT_RELEASE: u8 = 0x36 + 0x80;
 const CAPS_LOCK:u8 = 0x3A;
 const R_ALT: u8 = 0xE0;
 
+static mut KEYBOARD_SWITCH: bool = false;
+
 const QWERTY_LAYOUT: [u8; 94] = [
     b'~', b'!', b'@', b'#', b'$', b'%', b'^', b'&', b'*', b'(', b')', b'_', b'+',
     b'Q', b'W', b'E', b'R', b'T', b'Y', b'U', b'I', b'O', b'P', b'{', b'}', b'|',
@@ -41,6 +43,21 @@ pub const ALT_LAYOUT: [u8; 11] =[
     b'~', b'#', b'{', b'[', b'|', b'`', b'\\', b'^', b'@', b']', b'}',              // Row 1:     ~ # { [ | ` \ ^ @ ] ) }
 ];
 
+pub struct KeyboardGuard {}
+
+impl KeyboardGuard{
+    pub fn new() -> Self{
+        unsafe{KEYBOARD_SWITCH = false};
+        Self{}
+    }
+}
+
+impl Drop for KeyboardGuard{
+    fn drop(&mut self){
+        unsafe{KEYBOARD_SWITCH = true};
+    }
+}
+
 pub fn set_azerty(){
     unsafe{CURRENT_LAYOUT = AZERTY_LAYOUT};
 }
@@ -65,14 +82,17 @@ fn keyboard_handler(_regs: *const IntReg){
         else if scan_code == R_ALT{
             SHIFT_PRESSED ^= 0b100
         }
-        match scan_code{
-            0x0E => handle_backspace(&mut offset),
-            0x4B => handle_left_arrow(&mut offset),
-            0x4D => handle_right_arrow(&mut offset),
-            0x53 => handle_delete(&mut offset),
-            0x1C => handle_enter(&mut offset),
-            0x1D => handle_shortcuts(),
-            _ => handle_character(scan_code, SHIFT_PRESSED, &mut offset),
+        if KEYBOARD_SWITCH == true{
+
+            match scan_code{
+                0x0E => handle_backspace(&mut offset),
+                0x4B => handle_left_arrow(&mut offset),
+                0x4D => handle_right_arrow(&mut offset),
+                0x53 => handle_delete(&mut offset),
+                0x1C => handle_enter(&mut offset),
+                0x1D => handle_shortcuts(),
+                _ => handle_character(scan_code, SHIFT_PRESSED, &mut offset),
+            }
         }
     }
 }

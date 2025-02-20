@@ -18,8 +18,10 @@ mod keyboard;
 mod syscalls;
 mod tss;
 mod procs;
+mod queue;
+mod signals;
 
-// use screens::render;
+use crate::screens::welcome_screen;
 use gdt::init_gdt;
 use paging::init_page_tables;
 use multiboot::apply_mmap_info;
@@ -45,11 +47,7 @@ extern "C" {
     fn panic_halt() -> !;
 }
 
-#[no_mangle]
-fn test() -> ! {
-    // printf!("Welcome to User Land");
-    // let string: &[u8] = b"Hello World";
-    // crate::io::call_write(string);
+fn user_land() -> ! {
     loop{}
 }
 
@@ -60,8 +58,8 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
     init_idt();
     init_timer();
     init_keyboard();
-
-    crate::io::clear_vga();
+    
+    welcome_screen();
 
     unsafe{
         let ks = &kernel_start as *const u32 as u32;
@@ -72,7 +70,8 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
             panic!();
         }
 
-        exec_fn(0xC0000000, test as u32, ke);
+        exec_fn(0xC0000000, user_land as u32, ke);
+        
+        panic!();
     }
-    loop{}
 }

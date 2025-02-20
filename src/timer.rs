@@ -26,7 +26,7 @@ pub fn init_timer(){
 }
 
 pub fn sleep(){
-    let time = 18 * 60;
+    let time = 3 * 60;
     unsafe{
         let target = TICKS + (time as usize);
         while TICKS < target {}
