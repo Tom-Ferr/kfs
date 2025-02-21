@@ -289,9 +289,9 @@ pub fn map_code(dest: *mut PageDirectory, src: u32, size: u32) -> Result<(),()> 
             if let Some(p) = alloc_page(0x1000) {
                 (*dest).set_page(i as usize, p, 0x5);
                 let tb = p as *mut PageTable;
-                for i in 0..1024
+                for j in 0..1024
                 {
-                    (*tb).set_frame(i as usize, (f - 0xC0000000), 0x5);
+                    (*tb).set_frame(j as usize, (f - 0xC0000000), 0x5);
                     f += FRAME_SIZE;
                     if f >= code_end{
                         break;
