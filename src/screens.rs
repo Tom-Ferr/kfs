@@ -1,29 +1,24 @@
 use crate::io::*;
-use crate::key_handlers::*;
-use crate::printf;
-use crate::keyboard::SHIFT_PRESSED;
+use crate::keyboard::KeyboardGuard;
 
-#[allow(unused_imports)]
-use crate::printk;
-
-// static ASCII_ART: &[u8] = b"
-//            +++++[>++[>+>+        ++>++++>++++>++++>++++++
-//           >++++++>+++++++        ++>+++++++++<<<<<<<<<-]>>
-//          >+>+>+> >>>+[<]<        -]>>       >++>-->>+>>++>+
-//         >--<<<<  <<<.....         .>            ....<......
-//        ...>...   <<.>....                       >.>>>>>.<.
-//        <<<<..     ..<....                      >..>>>>>.<
-//       .<<<<.      >>>.<<.                     >>>>>.<.<
-//       <<<<<       <.>...>                    >>>.>>>.
-//      <<<.<        <<<..>>                  .>>>>>.<
-//     <.<<<         <<...>>                 >>>.<<<
-//    <..<.          ...>...               <<.>..>.
-//    >>.<.<<...>>...<<...>>...<         <....>>..
-//   .<<<.>.>>..>.<<.......<....        .....>...
-//                  <<.>...            .....>...
-//                  <......           .>>>.<<..
-//                  <<.>...          .....>...<......>.>>.<.<<<
-//                  .>......        ..>>...<<....>>.....>.<..>.";
+static ASCII_ART: &[u8] = b"
+           +++++[>++[>+>+        ++>++++>++++>++++>++++++
+          >++++++>+++++++        ++>+++++++++<<<<<<<<<-]>>
+         >+>+>+> >>>+[<]<        -]>>       >++>-->>+>>++>+
+        >--<<<<  <<<.....         .>            ....<......
+       ...>...   <<.>....                       >.>>>>>.<.
+       <<<<..     ..<....                      >..>>>>>.<
+      .<<<<.      >>>.<<.                     >>>>>.<.<
+      <<<<<       <.>...>                    >>>.>>>.
+     <<<.<        <<<..>>                  .>>>>>.<
+    <.<<<         <<...>>                 >>>.<<<
+   <..<.          ...>...               <<.>..>.
+   >>.<.<<...>>...<<...>>...<         <....>>..
+  .<<<.>.>>..>.<<.......<....        .....>...
+                 <<.>...            .....>...
+                 <......           .>>>.<<..
+                 <<.>...          .....>...<......>.>>.<.<<<
+                 .>......        ..>>...<<....>>.....>.<..>.";
 
 
 static mut SCREEN1_BUFFER: ScreenBuff = ScreenBuff::new();
@@ -91,86 +86,18 @@ pub unsafe fn change_screen(screen: Screen){
     }
     (*CURRENT_SCREEN).export();
 }
-
-// impl Screen {
-//     pub fn get_function(&self) -> Option<fn(& Screen) -> Screen> {
-//         match self {
-//             Screen::Screen1 => Some(screen_1),
-//             Screen::Screen2 => Some(screen_2),
-//             Screen::Screen3 => Some(screen_3),
-//         }
-//     }
-// }
-
-
-// pub fn render() -> ! {
-
-//     let mut current_screen: Screen = Screen::Screen1;
-//     loop{
-//         if let Some(run) = current_screen.get_function(){
-//             current_screen = run(&current_screen);
-                
-//         }
-//     }
-// }
                
-// fn screen_1(current_screen: &Screen) -> Screen {
-//     clear_vga();
+pub fn welcome_screen() {
+    let guard = KeyboardGuard::new();
+    clear_vga();
     
-//     enable_cursor(false);
+    enable_cursor(false);
 
-//     put_vga_string(ASCII_ART);
-
-//     printf!("\n\n\n\n              Please, press \'CTRL + {}\' to check bonuses", "(2 or 3)");
+    put_vga_string(ASCII_ART);
 
 
-//     loop {
-//         let scan_code = read_key();
-//         match scan_code {
-//             // 0x1D => { if let Some(f) = handle_shortcuts(current_screen){ return f;} },
-//             _ => {}
-//         }
-//     }
-// }
+    crate::timer::sleep();
 
-// fn screen_2(current_screen: &Screen) -> Screen {
-//     enable_cursor(true);
-//     unsafe {
-//         #[allow(static_mut_refs)]
-//         SCREEN2_BUFFER.export();
-    
-//         loop {
-//             let mut offset = get_cursor();
-//             let scan_code = read_key();
-//             match scan_code{
-//                 0x0E => handle_backspace(&mut offset),
-//                 0x4B => handle_left_arrow(&mut offset),
-//                 0x4D => handle_right_arrow(&mut offset),
-//                 0x53 => handle_delete(&mut offset),
-//                 0x1C => handle_enter(&mut offset),
-//                 0x1D => { if let Some(f) = handle_shortcuts(current_screen){ #[allow(static_mut_refs)]SCREEN2_BUFFER.import(); return f;} },
-//                 _ => handle_character(scan_code, SHIFT_PRESSED, &mut offset),
-//             }
-            
-//         }
-//     }
-// }
-
-// fn screen_3(current_screen: &Screen) -> Screen{
-//     clear_vga();
-    
-//     enable_cursor(false);
-
-//     printk!(INFO, "This is an example of {} log message\n", "INFO");
-//     printk!(WARNING, "This is an example of {} log message\n", "WARNING");
-//     printk!(ERROR, "This is an example of {} log message\n", "ERROR");
-//     printk!(DEBUG, "This is an example of {} log message\n", "DEBUG");
-
-//     loop {
-//         let scan_code = read_key();
-//         match scan_code {
-//             0x1D => { if let Some(f) = handle_shortcuts(current_screen){ return f;} },
-//             _ => {}
-//         }
-//     }
-// }
+    clear_vga();
+    enable_cursor(true);
+}
