@@ -306,6 +306,25 @@ pub fn map_code(dest: *mut PageDirectory, src: u32, size: u32) -> Result<(),()> 
     Ok(())
 }
 
+pub fn clean(start: u32, end: u32){
+    let mut curr = start;
+    let mut start_index: usize = (start >> 22) as usize;
+    let end_index: usize = (end >> 22) as usize;
+    while curr < end{
+        let target = get_physical_addr(curr as usize) + 0xC0000000;
+        free_page(target);
+        curr += FRAME_SIZE;
+    }
+    unsafe{
+        let dir = DIR.as_mut().unwrap();
+        while start_index < end_index {
+            let target = dir.get_page(start_index);
+            free_page(target);
+            start_index += 1;
+        }
+    }
+}
+
 pub fn init_page_tables(){
     unsafe{
         let dir = (crate::get_reg!(cr3) as u32 + 0xC0000000) as *const u32;

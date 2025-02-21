@@ -46,11 +46,14 @@ pub struct ProcessControlBlock {
     pendng: SignalQueue,
     blocked: SignalQueue,
     owner: u32,
+    heap: u32,
+    brk: u32,
+    stack_begin: u32,
+    stack_limit: u32,
+    exit_code: u32,
     // thread_count: u32,
     // threadList: *const Thread,
     // threads: [Thread; MAX_THREAD],
-    heap: u32,
-    brk: u32,
     esp: u32,
     ss:  u32,
     kernel_esp: u32,
@@ -80,11 +83,18 @@ impl ProcessControlBlock {
         let heap_page = FRAME_SIZE;
         let heap_frame = FRAME_SIZE;
         const array_size: usize = 6;
-        let bytes_array: [u32; array_size] = [size_of::<PageDirectory>() as u32, dir_data, (stack_npage * (size_of::<PageTable>() as u32)), stack_frame, heap_page, heap_frame];
+        let bytes_array: [u32; array_size-1] = [dir_data, (stack_npage * (size_of::<PageTable>() as u32)), stack_frame, heap_page, heap_frame];
         let mut ptr_array: [u32; array_size] = [0;array_size];
 
-        for i in 0..array_size {
-            if let Some( mut addr) = alloc_page(bytes_array[i] as usize) {
+        if let Some(addr) = kmalloc(size_of::<PageDirectory>()){
+            ptr_array[0] = addr;
+        }
+        else{
+            return Err(());
+        }
+
+        for i in 1..array_size {
+            if let Some( mut addr) = alloc_page(bytes_array[i-1] as usize) {
                 ptr_array[i] = addr;
             }
             else{
@@ -118,9 +128,12 @@ impl ProcessControlBlock {
             self.priority = 1;
             self.dir = dir_ptr;
             self.state = ProcStatus::Runnable;
-            self.code_text = code_init;
+            self.code_text = 0x00000000;
             self.code_size = code_size;
             self.heap = (code_npage as u32) << 22;
+            self.brk = self.heap + FRAME_SIZE;
+            self.stack_begin = 0xBFFFFFFC;
+            self.stack_limit = 0xC0000000 - FRAME_SIZE;
             // let mut th = Thread::new();
             // th.parent = self;
             // self.threads[0] = th;
@@ -173,12 +186,24 @@ impl ProcessControlBlock {
         self.pid
     }
 
+    pub fn clean(&self) {
+        clean(self.code_text, self.heap);
+        clean(self.stack_limit, 0xC0000000);
+        clean(self.heap, self.brk);
+        unsafe {free_page((*self.dir).get_directory() as u32)};
+        kfree(self.dir as u32);
+    }
+
+    pub fn fclean(&self) {
+        self.clean();
+        kfree(self as *const Self as u32);
+    }
+
 }
 
 impl Drop for ProcessControlBlock {
     fn drop(&mut self) {
-        // kfree(self.dir as u32);
-        kfree(self as *const Self as u32);
+        self.fclean();
     }
 }
 
