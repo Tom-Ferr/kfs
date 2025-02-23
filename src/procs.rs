@@ -21,8 +21,8 @@ extern "C" {
     fn switch_to_user_mode(esp: u32, eip: u32);
 }
 
-#[derive(Copy, Clone)]
-enum ProcStatus{
+#[derive(Copy, Clone, PartialEq)]
+pub enum ProcStatus{
     Unused,
     Zombie,
     Embryo,
@@ -38,7 +38,8 @@ pub struct ProcessControlBlock {
     state: ProcStatus,
     next: *const ProcessControlBlock,
     parent: *const ProcessControlBlock,
-    child: *const ProcessControlBlock,
+    children: Queue<Child>,
+    simbling: *const Child,
     code_text: u32,
     code_data: u32,
     code_bss: u32,
@@ -50,7 +51,7 @@ pub struct ProcessControlBlock {
     brk: u32,
     stack_begin: u32,
     stack_limit: u32,
-    exit_code: u32,
+    exit_code: i32,
     // thread_count: u32,
     // threadList: *const Thread,
     // threads: [Thread; MAX_THREAD],
@@ -127,7 +128,7 @@ impl ProcessControlBlock {
             self.pid = PID;
             self.priority = 1;
             self.dir = dir_ptr;
-            self.state = ProcStatus::Runnable;
+            self.state = ProcStatus::Embryo;
             self.code_text = 0x00000000;
             self.code_size = code_size;
             self.heap = (code_npage as u32) << 22;
@@ -147,6 +148,50 @@ impl ProcessControlBlock {
         unsafe{(*self.dir).get_directory()}
     }
 
+    pub fn get_parent(&self) -> *const ProcessControlBlock{
+        self.parent
+    }
+    
+    pub fn get_esp(&self) -> u32{
+        self.esp
+    }
+    
+    pub fn get_text(&self) -> u32{
+        self.code_text
+    }
+    
+    pub fn get_size(&self) -> u32{
+        self.code_size
+    }
+    
+    pub fn get_priority(&self) -> usize{
+        self.priority
+    }
+    
+    pub fn get_pid(&self) -> u32{
+        self.pid
+    }
+
+    pub fn get_state(&self) -> ProcStatus{
+        self.state
+    }
+
+    pub fn get_owner(&self) -> u32 {
+        self.owner
+    }
+
+    pub fn get_exit_code(&self) -> i32{
+        self.exit_code
+    }
+
+    pub fn set_exit_code(&mut self, value: i32){
+        self.exit_code = value;
+    }
+
+    pub fn set_state(&mut self, new_state: ProcStatus){
+        self.state = new_state;
+    }
+
     pub fn set_space(&mut self, u: UserSpace){
         unsafe{
 
@@ -162,43 +207,22 @@ impl ProcessControlBlock {
         self.parent = parent;
     }
 
-    pub fn set_child(&mut self, child: *const ProcessControlBlock){
-        self.child = child;
-    }
-
-    pub fn get_esp(&self) -> u32{
-        self.esp
-    }
-
-    pub fn get_text(&self) -> u32{
-        self.code_text
-    }
-
-    pub fn get_size(&self) -> u32{
-        self.code_size
-    }
-
-    pub fn get_priority(&self) -> usize{
-        self.priority
-    }
-
-    pub fn get_pid(&self) -> u32{
-        self.pid
-    }
-
     pub fn clean(&self) {
         clean(self.code_text, self.heap);
         clean(self.stack_limit, 0xC0000000);
         clean(self.heap, self.brk);
-        unsafe {free_page((*self.dir).get_directory() as u32)};
+        free_page(self.get_dir() as u32);
         kfree(self.dir as u32);
     }
 
     pub fn fclean(&self) {
         self.clean();
-        kfree(self as *const Self as u32);
+        Self::free(self as *const Self as u32);
     }
-
+    
+    pub fn free(ptr: u32){
+        kfree(ptr);
+    }
 }
 
 impl Drop for ProcessControlBlock {
@@ -214,6 +238,45 @@ impl Queuable for ProcessControlBlock {
     }
     fn set_next(&mut self, value: *const ProcessControlBlock){
         self.next = value;
+    }
+}
+
+impl ProcessControlBlock{
+
+    pub fn add_child(&mut self, child: *const ProcessControlBlock) {
+        self.children.insert(child as *mut Child);
+    }
+
+    pub fn get_child(&self) -> Option<*const ProcessControlBlock>{
+
+        if let Some(head) = self.children.get() {
+            return Some(head as *const ProcessControlBlock);
+        }
+        None
+    }
+
+    pub fn get_next_child(&mut self) -> Option<*const ProcessControlBlock>{
+
+        self.children.roll();
+
+        self.get_child()
+    }
+
+    pub fn remove_child(&mut self) {
+        self.children.remove();
+    }
+
+}
+
+struct Child(ProcessControlBlock);
+
+impl Queuable for Child {
+    type Ptr = Child;
+    fn get_next(&self) -> *const Child{
+        self.0.simbling
+    }
+    fn set_next(&mut self, value: *const Child){
+        self.0.simbling = value;
     }
 }
 
@@ -257,6 +320,64 @@ impl Queuable for ProcessControlBlock {
 //     flags: u32,
 // }
 
+pub unsafe fn sys_wait(status: &mut i32) -> Option<u32> {
+    let parent = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
+
+    loop {
+        if let Some(head) = (*parent).get_child() {
+            let mut curr: Option<*const ProcessControlBlock> = None;
+            let mut child = head;
+            while curr != Some(head) {
+                if (*child).get_state() == ProcStatus::Zombie {
+                    *status = (*child).get_exit_code();
+                    let pid = (*child).get_pid();
+                    (*parent).remove_child();
+                    ProcessControlBlock::free(child as u32);
+                    return Some(pid);
+                }
+                curr = (*parent).get_next_child();
+                child = *curr.as_ref().unwrap();
+            }
+        }
+        else {
+            return None;
+        }
+
+        (*parent).set_state(ProcStatus::Sleeping);
+    }
+}
+
+pub unsafe fn sys_exit(status: i32) {
+    let child = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
+    let parent = (*child).get_parent() as *mut ProcessControlBlock;
+
+        (*child).clean();
+        
+        (*child).set_exit_code(status);
+        
+        (*parent).set_state(ProcStatus::Runnable);
+        
+        (*child).set_state(ProcStatus::Zombie);
+
+        crate::timer::switch_task()
+}
+
+pub unsafe fn sys_getuid() -> u32 {
+        let proc = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
+        (*proc).get_owner()
+}
+
+// pub fn sys_kill(pid: u32, sig: Sig) -> Result<(),()>{
+//     //search for pid owner
+//     //add Sig to PCB's SignalQueue
+// }
+
+// pub fn sys_signal(sig: Sig, handler: u32) -> Option<u32>{
+//     //get current proc
+//     //add the handler to PCB's handler arrays;
+//     //return previous sig handler
+// }
+
 pub unsafe fn fork() -> Option<u32>{
     let parent_proc = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
     let start = (*parent_proc).get_text();
@@ -265,12 +386,13 @@ pub unsafe fn fork() -> Option<u32>{
 
     if let Some(child_proc) = ProcessControlBlock::new(start, size){
         unsafe{
+            (*parent_proc).add_child(child_proc);
             (*child_proc).set_parent(parent_proc);
-            (*parent_proc).set_child(child_proc);
+            QUEUES[(*child_proc).get_priority()].insert(child_proc);
 
            //copy stack
            //copy registers
-           QUEUES[(*child_proc).get_priority()].insert(child_proc);
+           (*child_proc).set_state(ProcStatus::Runnable);
         }
         let current_proc = *CURRENT_PROC.as_ref().unwrap();
         if (*current_proc).get_pid() == parent_pid {
@@ -290,6 +412,7 @@ pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
 
             CURRENT_PROC = Some(my_proc);
             QUEUES[(*my_proc).get_priority()].insert(my_proc);
+            (*my_proc).set_state(ProcStatus::Running);
             
             switch_to_user_mode(0xBFFFFFFC, func - 0xc0000000);
         }

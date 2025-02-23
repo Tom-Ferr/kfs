@@ -2,6 +2,7 @@ use crate::io::outb;
 use crate::idt::{install_irq_routine, IntReg};
 use crate::get_reg;
 use crate::procs::*;
+use crate::queue::Queuable;
 use core::arch::asm;
 
 static mut TICKS: usize = 0;
@@ -26,27 +27,37 @@ pub fn init_timer(){
 }
 
 pub fn sleep(){
-    let time = 3 * 60;
+    let time = 10 * 18;
     unsafe{
         let target = TICKS + (time as usize);
         while TICKS < target {}
     }
 }
 
-unsafe fn switch_task(){
+pub unsafe fn switch_task(){
     if let Some(_) = *CURRENT_TASK{
-        let current_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
-        (*current_task).set_esp(get_reg!(esp) as u32);
-        let current_priority = (*current_task).get_priority();
-        QUEUES[current_priority].roll();
-        for next_priority in 0..NUMBER_OF_QUEUES{
+        let prev_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
+        (*prev_task).set_esp(get_reg!(esp) as u32);
+        (*prev_task).set_state(ProcStatus::Runnable);
+        let prev_priority = (*prev_task).get_priority();
+        QUEUES[prev_priority].roll();
+        'priority_queue: for next_priority in 0..NUMBER_OF_QUEUES{
             if let Some(head) = QUEUES[next_priority].get(){
+                let mut proc = head;
+                while (*proc).get_state() != ProcStatus::Runnable{
+                    proc = (*proc).get_next();
+                    QUEUES[next_priority].roll();
+                    if proc == head{
+                        continue 'priority_queue;
+                    }
+                }
                 CURRENT_PROC = Some(head);
                 let next_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
                 let dir = (*next_task).get_dir() - 0xC0000000;
+                (*prev_task).set_state(ProcStatus::Running);
                 asm!("mov cr3, {}", in(reg) dir);
                 asm!("mov esp, {}", in(reg)(*next_task).get_esp());
-                break;
+                return;
             }
         }
     }

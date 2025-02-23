@@ -2,6 +2,7 @@ use crate::queue::*;
 
 pub type SignalQueue = Queue<Signal>;
 
+#[derive(Copy, Clone)]
 #[repr(i32)]
 pub enum Sig {
     Hangup         = 1, 
@@ -40,6 +41,12 @@ pub enum Sig {
 pub struct Signal{
     signal: Sig,
     next: *const Signal
+}
+
+impl Signal{
+    pub fn get_signal(&self) -> Sig {
+        self.signal
+    }
 }
 
 impl Queuable for Signal {
