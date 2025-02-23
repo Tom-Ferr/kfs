@@ -1,3 +1,5 @@
+use crate::malloc::kfree;
+
 pub trait Queuable{
     type Ptr;
     fn get_next(&self) -> *const Self::Ptr;
@@ -41,8 +43,14 @@ impl<T: Queuable<Ptr=T>> Queue<T>{
             unsafe{
                 let head = *self.head.as_ref().unwrap();
                 let tail = *self.tail.as_mut().unwrap() as *mut T;
-                (*tail).set_next((*head).get_next());
-                self.head = Some((*head).get_next());
+                if head == tail{
+                    self.head = None;
+                    self.tail = None;
+                }
+                else{
+                    (*tail).set_next((*head).get_next());
+                    self.head = Some((*head).get_next());
+                }
             }
         }
     }
@@ -59,5 +67,12 @@ impl<T: Queuable<Ptr=T>> Queue<T>{
 
     pub fn get(&self) -> Option<*const T>{
         self.head
+    }
+
+    pub fn clean(&mut self){
+        while let Some(head) = self.get(){
+            self.remove();
+            kfree(head as u32);
+        }
     }
 }

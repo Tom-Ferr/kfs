@@ -1,9 +1,12 @@
 use crate::queue::*;
+use crate::malloc::{kmalloc, kfree};
 
 pub type SignalQueue = Queue<Signal>;
 
+pub static mut DEFAULT_SIG_HANDLERS: [u32; 31] = [0; 31];
+
 #[derive(Copy, Clone)]
-#[repr(i32)]
+#[repr(usize)]
 pub enum Sig {
     Hangup         = 1, 
     Interrupt      = 2, 
@@ -44,8 +47,23 @@ pub struct Signal{
 }
 
 impl Signal{
+    pub fn new(signal: Sig) -> Option<*const Self>{
+        if let Some(addr) = kmalloc(size_of::<Self>()){
+            let ptr = addr as *mut Self;
+            unsafe{ (*ptr).signal = signal};
+            return Some(ptr);
+        }
+        None
+    }
+
     pub fn get_signal(&self) -> Sig {
         self.signal
+    }
+}
+
+impl Drop for Signal{
+    fn drop(&mut self){
+        kfree(self as *const Self as u32);
     }
 }
 

@@ -7,6 +7,10 @@ use core::arch::asm;
 type ReadyQueue = Queue<ProcessControlBlock>;
 
 const MAX_THREAD: usize = 5;
+const MAX_PROCS: usize = 63;
+
+pub static mut MY_PROCS: [u32; MAX_PROCS] = [0; MAX_PROCS];
+
 pub const NUMBER_OF_QUEUES: usize = 3;
 
 static mut PID: u32 = 0;
@@ -44,8 +48,9 @@ pub struct ProcessControlBlock {
     code_data: u32,
     code_bss: u32,
     code_size: u32,
-    pendng: SignalQueue,
+    pending: SignalQueue,
     blocked: SignalQueue,
+    sig_handlers: [u32; 31],
     owner: u32,
     heap: u32,
     brk: u32,
@@ -69,7 +74,10 @@ impl ProcessControlBlock {
             unsafe{
 
                 if let Ok(..) = (*ptr).init(code_init, code_size){
-                    return Some(ptr);
+                   if let Ok((..)) = Self::register(addr){
+                       return Some(ptr);
+                   }
+                   (*ptr).fclean();
                 }
             }
         }
@@ -135,6 +143,9 @@ impl ProcessControlBlock {
             self.brk = self.heap + FRAME_SIZE;
             self.stack_begin = 0xBFFFFFFC;
             self.stack_limit = 0xC0000000 - FRAME_SIZE;
+            self.sig_handlers = DEFAULT_SIG_HANDLERS;
+            self.pending = SignalQueue::new();
+            self.blocked = SignalQueue::new();
             // let mut th = Thread::new();
             // th.parent = self;
             // self.threads[0] = th;
@@ -184,6 +195,24 @@ impl ProcessControlBlock {
         self.exit_code
     }
 
+    pub fn get_handler(&self, sig: Sig) -> u32{
+        self.sig_handlers[sig as usize - 1]
+    }
+
+    pub fn add_handler(&mut self, sig: Sig, handler: u32){
+        self.sig_handlers[sig as usize - 1] = handler;
+    }
+
+    pub fn get_signal(&self) -> Option<Sig> {
+        if let Some(pending_signal) = self.pending.get(){
+            unsafe{
+                let signal = (*pending_signal).get_signal();
+                return Some(signal);
+            } 
+        }
+        None
+    }
+
     pub fn set_exit_code(&mut self, value: i32){
         self.exit_code = value;
     }
@@ -207,7 +236,13 @@ impl ProcessControlBlock {
         self.parent = parent;
     }
 
-    pub fn clean(&self) {
+    pub fn recv_sig(&mut self, signal: *const Signal){
+        self.pending.insert(signal as *mut Signal);
+    }
+
+    pub fn clean(&mut self) {
+        self.pending.clean();
+        self.blocked.clean();
         clean(self.code_text, self.heap);
         clean(self.stack_limit, 0xC0000000);
         clean(self.heap, self.brk);
@@ -215,13 +250,36 @@ impl ProcessControlBlock {
         kfree(self.dir as u32);
     }
 
-    pub fn fclean(&self) {
+    pub fn fclean(&mut self) {
         self.clean();
         Self::free(self as *const Self as u32);
     }
     
     pub fn free(ptr: u32){
         kfree(ptr);
+    }
+
+    pub fn register(ptr: u32) -> Result<(),()>{
+        unsafe{
+            for i in 0..MAX_PROCS{
+                if MY_PROCS[i] == 0 {
+                    MY_PROCS[i] = ptr;
+                    return Ok(());
+                }
+            }
+        }
+        Err(())
+    }
+
+    pub fn unregister(ptr: u32){
+        unsafe{
+            for i in 0..MAX_PROCS{
+                if MY_PROCS[i] == ptr {
+                    MY_PROCS[i] = 0;
+                    break;
+                }
+            }
+        }
     }
 }
 
@@ -367,18 +425,27 @@ pub unsafe fn sys_getuid() -> u32 {
         (*proc).get_owner()
 }
 
-// pub fn sys_kill(pid: u32, sig: Sig) -> Result<(),()>{
-//     //search for pid owner
-//     //add Sig to PCB's SignalQueue
-// }
+pub unsafe fn sys_kill(pid: u32, sig: Sig) -> Result<(),()>{
+    for i in 0..MAX_PROCS{
+        let ptr = MY_PROCS[i] as *mut ProcessControlBlock;
+        if (*ptr).get_pid() == pid {
+            if let Some(signal) = Signal::new(sig){
+                (*ptr).recv_sig(signal);
+                return Ok(());
+            }
+        }
+    }
+    Err(())
+}
 
-// pub fn sys_signal(sig: Sig, handler: u32) -> Option<u32>{
-//     //get current proc
-//     //add the handler to PCB's handler arrays;
-//     //return previous sig handler
-// }
+pub unsafe fn sys_signal(sig: Sig, handler: u32) -> Option<u32>{
+    let current_proc = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
+    let ret = (*current_proc).get_handler(sig);
+    (*current_proc).add_handler(sig, handler);
+    Some(ret)
+}
 
-pub unsafe fn fork() -> Option<u32>{
+pub unsafe fn sys_fork() -> Option<u32>{
     let parent_proc = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
     let start = (*parent_proc).get_text();
     let size = (*parent_proc).get_size();

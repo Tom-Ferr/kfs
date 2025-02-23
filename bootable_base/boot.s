@@ -83,5 +83,5 @@ virtual_space:
 
 align 16
 stack_bottom:
-    resb 4096 * 40
+    resb 4096 * 4
 stack_top:
