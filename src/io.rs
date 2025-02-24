@@ -120,6 +120,9 @@ pub fn color_mode(light: bool) {
                 color = current;
             }
             *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | color;
+            crate::screens::SCREEN1_BUFFER.update_color_mode((offset >> 1) as usize,  prev_text_color);
+            crate::screens::SCREEN2_BUFFER.update_color_mode((offset >> 1) as usize,  prev_text_color);
+            crate::screens::SCREEN3_BUFFER.update_color_mode((offset >> 1) as usize,  prev_text_color);
             offset += 2;
         }
 
@@ -210,6 +213,11 @@ pub fn _print_fmt_str(args: core::fmt::Arguments) {
     use core::fmt::Write;
     let mut writer = Writer::new();
     let _ = writer.write_fmt(args);
+    let mut offset = get_cursor();
+    if offset >= 25 * 80 * 2 {
+        offset = scroll_ln(offset);
+        set_cursor(offset);
+    }
 }
 
 pub fn _print_fmt_log(level: LogLevel, args: core::fmt::Arguments) {

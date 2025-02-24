@@ -21,15 +21,15 @@ static ASCII_ART: &[u8] = b"
                  .>......        ..>>...<<....>>.....>.<..>.";
 
 
-static mut SCREEN1_BUFFER: ScreenBuff = ScreenBuff::new();
-static mut SCREEN2_BUFFER: ScreenBuff = ScreenBuff::new();
-static mut SCREEN3_BUFFER: ScreenBuff = ScreenBuff::new();
+pub static mut SCREEN1_BUFFER: ScreenBuff = ScreenBuff::new();
+pub static mut SCREEN2_BUFFER: ScreenBuff = ScreenBuff::new();
+pub static mut SCREEN3_BUFFER: ScreenBuff = ScreenBuff::new();
 pub static mut CURRENT_SCREEN: *mut ScreenBuff = unsafe{&mut SCREEN1_BUFFER as *mut ScreenBuff};
 
 #[derive(Copy, Clone)]
 pub struct ScreenBuff{
-    text: [u8; 150*80],
-    color: [u8; 150*80],
+    text: [u8; 25*80],
+    color: [u8; 25*80],
     offset: u32,
 }
 
@@ -37,8 +37,8 @@ impl ScreenBuff{
     const fn new() -> Self{
         unsafe{
             Self{
-                text: [0; 150*80],
-                color: [BACKGROUND_COLOR << 4 | TEXT_COLOR; 150*80],
+                text: [0; 25*80],
+                color: [BACKGROUND_COLOR << 4 | TEXT_COLOR; 25*80],
                 offset: 0,
             }
         }
@@ -48,7 +48,7 @@ impl ScreenBuff{
         let vga_buffer = VGA_BUFFER as *const u8;
         unsafe{
 
-            for i in 0..(150*80){
+            for i in 0..(25*80){
                 self.text[i] = *vga_buffer.offset(i as isize * 2);
                 self.color[i] = *vga_buffer.offset((i as isize * 2) + 1);
             }
@@ -60,12 +60,23 @@ impl ScreenBuff{
         let vga_buffer = VGA_BUFFER as *mut u8;
         unsafe{
 
-            for i in 0..(150*80){
+            for i in 0..(25*80){
                 *vga_buffer.offset(i as isize * 2) = self.text[i];
                 *vga_buffer.offset((i as isize * 2) + 1) = self.color[i];
             }
         }
         set_cursor(self.offset);
+    }
+
+    pub fn update_color_mode(&mut self, index: usize, prev_text_color: u8){
+        unsafe{
+            let current: u8 = self.color[index] & 0b1111;
+            let mut color = TEXT_COLOR;
+            if current != prev_text_color {
+                color = current;
+            }
+            self.color[index] = BACKGROUND_COLOR << 4 | color;
+        }
     }
 }
 
