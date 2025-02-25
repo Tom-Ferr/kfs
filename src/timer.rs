@@ -53,7 +53,7 @@ pub unsafe fn switch_task(){
                 }
                 CURRENT_PROC = Some(head);
                 let next_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
-                let dir = (*next_task).get_dir() - 0xC0000000;
+                let dir = (*next_task).get_cr3() - 0xC0000000;
                 (*prev_task).set_state(ProcStatus::Running);
                 asm!("mov cr3, {}", in(reg) dir);
                 asm!("mov esp, {}", in(reg)(*next_task).get_esp());
@@ -63,11 +63,14 @@ pub unsafe fn switch_task(){
     }
 }
 
-#[allow(dead_code)]
-fn schedule(_regs: *const IntReg){
-    unsafe{
-        if TICKS % 10 == 0{
-            switch_task();
+unsafe fn schedule(_regs: *const IntReg){
+    if let Some(current_proc) = CURRENT_PROC {
+        if let Some(signal) = (*current_proc).get_signal(){
+            let handler = (*current_proc).get_handler(signal) as *const fn (i32);
+            (*handler)(signal as i32);
         }
+    }
+    if TICKS % 10 == 0{
+        switch_task();
     }
 }

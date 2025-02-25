@@ -1,5 +1,6 @@
 use core::mem::size_of;
 use crate::paging::*;
+use crate::procs::CURRENT_PROC;
 
 const NALLOC: usize = 1024;
 
@@ -269,4 +270,110 @@ pub fn init_freelist(kernel_end: u32){
         (*target).size = NALLOC;
         kfree(target.wrapping_add(1) as u32);
     }
+}
+
+fn check_user_space(nbytes: usize, addr: Option<u32>) -> Option<u32>{
+    let mut nframes = nbytes / FRAME_SIZE as usize;
+    let mut ntables = nframes / 1024;
+    let mut candidate: Option<u32> = None;
+    let dir_hint  = (if let Some(hint) = addr {hint >> 22} else {0}) as usize;
+    let tab_hint  = (if let Some(hint) = addr {(hint >> 12) & 0x3FF } else {0}) as usize;
+    
+    if nbytes % FRAME_SIZE as usize > 0{
+        nframes += 1;
+    }
+    if nbytes % 1024 > 0{
+        ntables += 1;
+    }
+
+    unsafe{     
+        #[allow(static_mut_refs)]
+        let proc = *CURRENT_PROC.as_mut().unwrap();
+        let dir = (*proc).get_dir();
+        let heap_index = (*proc).get_heap() >> 22;
+        while ntables > dir.get_allocs(){
+            if let Err(..) = dir.new_page(){
+                return None;
+            }
+        }
+        for offset in dir_hint..=dir.get_allocs(){
+            for i in tab_hint..1024 {
+                let byte_index: usize = i / 32;
+                let bit_index: usize = i % 32;
+
+                let mut cursor = !0;
+                let mut limit = 0;
+                if nframes < 32{
+                    limit = 32 - nframes;
+                    cursor = cursor >> limit;
+                }
+                
+                if bit_index > limit as usize{
+                    continue;
+                }
+                
+                let target = cursor << bit_index;
+                if (BITMAP[heap_index + offset as usize][byte_index] & target) == 0 {
+                    if candidate == None{
+                        candidate = Some(( (heap_index + offset) << 22 | i << 10) as u32);
+                    }
+                    nframes -= 32 - limit;
+                    if nframes == 0 {
+                        return candidate;
+                    }
+                    continue ;
+                }
+                candidate = None;
+                nframes = nbytes / FRAME_SIZE as usize;
+            }
+        }
+    }
+    None
+}
+
+fn umap(nbytes: usize, vaddr: u32, prot: i32) -> Result<(),()> {
+
+    let mut nframes = nbytes / FRAME_SIZE as usize;
+    if nbytes % FRAME_SIZE as usize > 0{
+        nframes += 1;
+    }
+    
+    unsafe{
+        let mut ptr = vaddr;
+        #[allow(static_mut_refs)]
+        let proc = *CURRENT_PROC.as_mut().unwrap();
+        let dir = (*proc).get_dir();
+        for _ in 0..nframes{
+            if let Some(addr) = alloc_page(FRAME_SIZE as usize){
+                let tab_index = (ptr >> 12 & 0x3FF) as usize;
+                let dir_index = (ptr >> 22) as usize;
+                let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
+                tab.set_frame(tab_index, addr - 0xC0000000, prot as u32);
+                ptr += FRAME_SIZE;
+            }
+            else{
+                let mut begin = vaddr;
+                while begin != ptr{
+                    let tab_index = (begin >> 12 & 0x3FF) as usize;
+                    let dir_index = (begin >> 22) as usize;
+                    let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
+                    let frame = tab.get_frame(tab_index);
+                    free_page(frame);
+                    begin += FRAME_SIZE;
+                }
+                return Err(());
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn sys_mmap(addr: Option<u32>, length: usize, prot: i32) -> Option<u32>{
+    if let Some(vaddr) = check_user_space(length, addr){
+        if let Ok(..) = umap(length, vaddr, prot){
+            return Some(vaddr);
+        }
+    }
+    None
+
 }

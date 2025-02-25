@@ -74,9 +74,9 @@ impl ProcessControlBlock {
             unsafe{
 
                 if let Ok(..) = (*ptr).init(code_init, code_size){
-                   if let Ok((..)) = Self::register(addr){
+                    if let Ok((..)) = Self::register(addr){
                        return Some(ptr);
-                   }
+                    }
                    (*ptr).fclean();
                 }
             }
@@ -155,7 +155,7 @@ impl ProcessControlBlock {
         Ok(())
     }
 
-    pub fn get_dir(&self) -> usize {
+    pub fn get_cr3(&self) -> usize {
         unsafe{(*self.dir).get_directory()}
     }
 
@@ -197,6 +197,16 @@ impl ProcessControlBlock {
 
     pub fn get_handler(&self, sig: Sig) -> u32{
         self.sig_handlers[sig as usize - 1]
+    }
+
+    pub fn get_heap(&self) -> usize {
+        self.heap as usize
+    }
+
+    pub fn get_dir(&self) -> &mut PageDirectory {
+        unsafe{
+            &mut (*self.dir)
+        }
     }
 
     pub fn add_handler(&mut self, sig: Sig, handler: u32){
@@ -246,7 +256,7 @@ impl ProcessControlBlock {
         clean(self.code_text, self.heap);
         clean(self.stack_limit, 0xC0000000);
         clean(self.heap, self.brk);
-        free_page(self.get_dir() as u32);
+        free_page(self.get_cr3() as u32);
         kfree(self.dir as u32);
     }
 
@@ -431,6 +441,9 @@ pub unsafe fn sys_kill(pid: u32, sig: Sig) -> Result<(),()>{
         if (*ptr).get_pid() == pid {
             if let Some(signal) = Signal::new(sig){
                 (*ptr).recv_sig(signal);
+                if (*ptr).get_state() == ProcStatus::Sleeping{
+                    (*ptr).set_state(ProcStatus::Runnable);
+                }
                 return Ok(());
             }
         }
@@ -474,7 +487,7 @@ pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
     if let Some(my_proc) = ProcessControlBlock::new(start, size){
         unsafe{
 
-            let dir = (*my_proc).get_dir() - 0xC0000000;
+            let dir = (*my_proc).get_cr3() - 0xC0000000;
             asm!("mov cr3, {}", in(reg) dir);
 
             CURRENT_PROC = Some(my_proc);
