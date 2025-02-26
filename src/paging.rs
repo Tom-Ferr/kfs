@@ -1,6 +1,8 @@
 use crate::io::*;
 
-pub static mut DIR: Option<PageDirectory> = None;
+pub static mut ORIGINAL_DIR: PageDirectory = PageDirectory{directory: 0 as *mut AlignedPage, whoami: UserSpace::Kernel, allocs: 0, virtual_allocs: 0};
+
+pub static mut DIR: *mut PageDirectory = unsafe{&mut ORIGINAL_DIR as *mut PageDirectory};
 
 pub const FRAME_SIZE: u32 = 0x1000;
 
@@ -74,7 +76,7 @@ impl PageDirectory {
         unsafe{
             let _ = crate::idt::InterruptGuard::new();
             #[allow(static_mut_refs)]
-            let kern = (*DIR.as_ref().unwrap()).directory;
+            let kern = (*DIR).directory;
             (*usr).data = (*kern).data;
         }
         
@@ -177,7 +179,7 @@ pub fn alloc_page(nbytes: usize) -> Option<u32> {
     let cursor = !0 >> limit;
     unsafe{
         #[allow(static_mut_refs)]
-        let dir = DIR.as_mut().unwrap();
+        let dir = &mut *DIR;
 
         for offset in 0..=dir.get_allocs(){
             let tab = &mut *(dir.get_page(offset as usize) as *mut PageTable);
@@ -211,7 +213,7 @@ pub fn free_page(ptr: u32) {
     unsafe {
 
         #[allow(static_mut_refs)]
-        let dir = DIR.as_mut().unwrap();
+        let dir = &mut *DIR;
         let offset = ptr / 0x400000;
         let frame_index: usize = ((ptr / FRAME_SIZE) % 1024) as usize;
         let byte_index: usize = frame_index / 32;
@@ -225,7 +227,7 @@ pub fn free_page(ptr: u32) {
 pub fn block_pages(addr: u32, len: u32){
     unsafe{
         #[allow(static_mut_refs)]
-        let dir = DIR.as_mut().unwrap();
+        let dir = &mut *DIR;
         let end = addr + len;
 
         let _begin_offset = addr / 0x400000;
@@ -269,7 +271,7 @@ pub fn get_physical_addr(vaddr: usize) -> u32 {
 
     unsafe{
         #[allow(static_mut_refs)]
-        let dir = DIR.as_mut().unwrap();
+        let dir = &mut *DIR;
         
         let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
         let frame = tab.get_frame(tab_index) - 0xC0000000;
@@ -309,6 +311,7 @@ pub fn map_code(dest: *mut PageDirectory, src: u32, size: u32) -> Result<(),()> 
 pub fn init_page_tables(){
     unsafe{
         let dir = (crate::get_reg!(cr3) as u32 + 0xC0000000) as *const u32;
-        DIR = Some(PageDirectory::new(dir));
+        ORIGINAL_DIR = PageDirectory::new(dir);
+        // DIR = &mut FIRST_DIR as *mut PageDirectory;
     }
 }

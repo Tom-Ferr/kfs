@@ -51,11 +51,8 @@ pub unsafe fn switch_task(){
                         continue 'priority_queue;
                     }
                 }
-                CURRENT_PROC = Some(head);
+                change_process(Some(head));
                 let next_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
-                let dir = (*next_task).get_cr3() - 0xC0000000;
-                (*prev_task).set_state(ProcStatus::Running);
-                asm!("mov cr3, {}", in(reg) dir);
                 asm!("mov esp, {}", in(reg)(*next_task).get_esp());
                 return;
             }

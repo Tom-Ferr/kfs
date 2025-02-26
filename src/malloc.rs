@@ -41,7 +41,7 @@ fn check_virtual_space(nbytes: usize) -> Option<u32>{
 
     unsafe{     
         #[allow(static_mut_refs)]
-        let dir = DIR.as_mut().unwrap();
+        let dir = &mut *DIR;
         while ntables > dir.get_virtual_allocs(){
             if let Err(..) = dir.new_virtual_page(dir.get_virtual_allocs() + 1){
                 return None;
@@ -93,7 +93,7 @@ fn vmap(nbytes: usize, vaddr: u32) -> Result<(),()> {
     unsafe{
         let mut ptr = vaddr;
         #[allow(static_mut_refs)]
-        let dir = DIR.as_mut().unwrap();
+        let dir = &mut *DIR;
         for _ in 0..nframes{
             if let Some(addr) = alloc_page(FRAME_SIZE as usize){
                 let tab_index = (ptr >> 12 & 0x3FF) as usize;

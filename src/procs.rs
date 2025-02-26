@@ -239,8 +239,7 @@ impl ProcessControlBlock {
                     return Err(1);
                 }
                 
-                self.init_pages(addr, dir_data,src.code_text, src.code_size)?;
-
+                self.init_pages(addr, dir_data,src.code_text + 0xC0000000, src.code_size)?;
                 self.copy_memory(src.stack_limit, src.stack_begin)?;
                 self.copy_memory(src.heap, src.brk)?;
                 
@@ -269,7 +268,7 @@ impl ProcessControlBlock{
         let end_index: usize = (end >> 22) as usize;
     
         unsafe{
-            let dir = self.get_dir();
+            let dir = &mut *DIR;
             while start_index < end_index {
                 if let Some(target) = alloc_page(FRAME_SIZE as usize){
     
@@ -314,7 +313,7 @@ impl ProcessControlBlock{
             curr += FRAME_SIZE;
         }
         unsafe{
-            let dir = self.get_dir();
+            let dir = &mut *DIR;
             while start_index < end_index {
                 let target = dir.get_page(start_index);
                 free_page(target);
@@ -686,16 +685,21 @@ pub unsafe fn sys_fork() -> Option<u32>{
     None
 }
 
+pub unsafe fn change_process(new_proc: Option<*const ProcessControlBlock>){
+    CURRENT_PROC = new_proc;
+    let next_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
+    DIR = (*next_task).get_dir() as *mut PageDirectory;
+    let dir = (*next_task).get_cr3() - 0xC0000000;
+    (*next_task).set_state(ProcStatus::Running);
+    asm!("mov cr3, {}", in(reg) dir);
+}
+
 pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
     if let Some(my_proc) = ProcessControlBlock::new(start, size){
         unsafe{
 
-            let dir = (*my_proc).get_cr3() - 0xC0000000;
-            asm!("mov cr3, {}", in(reg) dir);
-
-            CURRENT_PROC = Some(my_proc);
             QUEUES[(*my_proc).get_priority()].insert(my_proc);
-            (*my_proc).set_state(ProcStatus::Running);
+            change_process(Some(my_proc));
             
             switch_to_user_mode(0xBFFFFFFC, func - 0xc0000000);
         }
