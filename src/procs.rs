@@ -80,6 +80,8 @@ impl ProcessControlBlock {
                     if result == 1{
                         kfree((*ptr).dir as u32);
                     }
+                    (*ptr).pending.clean();
+                    (*ptr).blocked.clean();
                     (*ptr).clean_memory((*ptr).code_text, (*ptr).heap);
                     (*ptr).clean_memory((*ptr).stack_limit, 0xC0000000);
                     (*ptr).clean_memory((*ptr).heap, (*ptr).brk);
@@ -103,6 +105,8 @@ impl ProcessControlBlock {
                     if result == 1{
                         kfree((*ptr).dir as u32);
                     }
+                    (*ptr).pending.clean();
+                    (*ptr).blocked.clean();
                     (*ptr).clean_memory((*ptr).code_text, (*ptr).heap);
                     (*ptr).clean_memory((*ptr).stack_limit, 0xC0000000);
                     (*ptr).clean_memory((*ptr).heap, (*ptr).brk);
@@ -209,21 +213,23 @@ impl ProcessControlBlock {
     }
 
     fn import(&mut self, src: &Self) -> Result<(),u8> {
-        let stack_size = (*src).get_stack_size();
+        let stack_size = src.get_stack_size();
         let stack_npage = ((stack_size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
-        let code_npage = (((*src).code_size + FRAME_SIZE - 1) / FRAME_SIZE) as usize;
+        let code_npage = ((src.code_size + FRAME_SIZE - 1) / FRAME_SIZE) as usize;
         
-        self.stack_begin = (*src).stack_begin;
-        self.stack_limit = (*src).stack_limit;
-        self.code_text = (*src).code_text;
-        self.heap = (*src).heap;
-        self.brk = (*src).brk;
+        self.stack_begin = src.stack_begin;
+        self.stack_limit = src.stack_limit;
+        self.code_text = src.code_text;
+        self.heap = src.heap;
+        self.brk = src.brk;
 
         if let Some(addr) = kmalloc(size_of::<PageDirectory>()){
             unsafe{
                 
                 let dir_ptr = addr as *mut PageDirectory;
                 self.dir = dir_ptr;
+
+                self.copy_queue(&mut (*(src as *const Self as *mut Self)).pending)?;
 
                 let mut dir_data;
                 if let Some(data) = alloc_page(FRAME_SIZE as usize) {
@@ -233,20 +239,20 @@ impl ProcessControlBlock {
                     return Err(1);
                 }
                 
-                self.init_pages(addr, dir_data,(*src).code_text, (*src).code_size)?;
+                self.init_pages(addr, dir_data,src.code_text, src.code_size)?;
 
-                self.copy_memory((*src).stack_limit, (*src).stack_begin)?;
-                self.copy_memory((*src).heap, (*src).brk)?;
+                self.copy_memory(src.stack_limit, src.stack_begin)?;
+                self.copy_memory(src.heap, src.brk)?;
                 
                 PID += 1;
                 self.pid = PID;
                 self.state = ProcStatus::Embryo;
-                self.priority = (*src).priority;
-                self.code_size = (*src).code_size;
-                self.sig_handlers = (*src).sig_handlers;
+                self.priority = src.priority;
+                self.code_size = src.code_size;
+                self.sig_handlers = src.sig_handlers;
                 self.pending = SignalQueue::new();
                 self.blocked = SignalQueue::new();
-                self.owner = (*src).owner;
+                self.owner = src.owner;
             }
         }
         else{
@@ -315,6 +321,28 @@ impl ProcessControlBlock{
                 start_index += 1;
             }
         }
+    }
+
+    fn copy_queue(&mut self, src: &mut SignalQueue) -> Result<(),u8>{
+        unsafe{
+            if let Some(head) = src.get() {
+                let mut curr: Option<*const Signal> = None;
+                let mut ptr = head;
+                while curr != Some(head) {
+                    let sig = (*ptr).get_signal();
+                    if let Some(signal) = Signal::new(sig){
+                        self.recv_sig(signal);
+                    }
+                    else{
+                        return Err(1);
+                    }
+                    src.roll();
+                    curr = src.get();
+                    ptr = *curr.as_mut().unwrap();
+                }
+            }
+        }
+        Ok(())
     }
 }
 
