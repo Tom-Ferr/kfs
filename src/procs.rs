@@ -68,139 +68,263 @@ pub struct ProcessControlBlock {
 
 impl ProcessControlBlock {
 
+    const ARRAY_SIZE: usize = 6;
+    const ARRAY_OFFSET: usize = 1;
+
     pub fn new(code_init: u32, code_size: u32) -> Option<*mut Self> {
         if let Some(addr) = kmalloc(size_of::<ProcessControlBlock>()) {
             let ptr = addr as *mut Self;
             unsafe{
 
-                if let Ok(..) = (*ptr).init(code_init, code_size){
-                    if let Ok((..)) = Self::register(addr){
-                       return Some(ptr);
+                if let Err(result) = (*ptr).init(code_init, code_size){
+                    if result == 1{
+                        kfree((*ptr).dir as u32);
                     }
-                   (*ptr).fclean();
+                    (*ptr).clean_memory((*ptr).code_text, (*ptr).heap);
+                    (*ptr).clean_memory((*ptr).stack_limit, 0xC0000000);
+                    (*ptr).clean_memory((*ptr).heap, (*ptr).brk);
+                    free_page((*ptr).get_cr3() as u32);
+                    kfree(addr);
+                }
+                if let Ok((..)) = Self::register(addr){
+                   return Some(ptr);
                 }
             }
         }
         None
     }
 
-    fn init(&mut self, code_init: u32, code_size: u32) -> Result<(),()> {
-        let stack_size = 0x1000;
-        let stack_npage = ((stack_size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
+    pub fn clone(src: &Self) -> Option<*mut Self> {
+        if let Some(addr) = kmalloc(size_of::<ProcessControlBlock>()) {
+            let ptr = addr as *mut Self;
+            unsafe{
+
+                if let Err(result) = (*ptr).import(src){
+                    if result == 1{
+                        kfree((*ptr).dir as u32);
+                    }
+                    (*ptr).clean_memory((*ptr).code_text, (*ptr).heap);
+                    (*ptr).clean_memory((*ptr).stack_limit, 0xC0000000);
+                    (*ptr).clean_memory((*ptr).heap, (*ptr).brk);
+                    free_page((*ptr).get_cr3() as u32);
+                    kfree(addr);
+                }
+                if let Ok((..)) = Self::register(addr){
+                   return Some(ptr);
+                }
+            }
+        }
+        None
+    }
+
+    fn init_alloc(&self, stack_npage: u32) -> Option<[u32; Self::ARRAY_SIZE]>{
         let dir_data = FRAME_SIZE;
         let stack_frame = FRAME_SIZE;
         let heap_page = FRAME_SIZE;
         let heap_frame = FRAME_SIZE;
-        const array_size: usize = 6;
-        let bytes_array: [u32; array_size-1] = [dir_data, (stack_npage * (size_of::<PageTable>() as u32)), stack_frame, heap_page, heap_frame];
-        let mut ptr_array: [u32; array_size] = [0;array_size];
+
+        let bytes_array: [u32; Self::ARRAY_SIZE - Self::ARRAY_OFFSET] = [dir_data, (stack_npage * (size_of::<PageTable>() as u32)), stack_frame, heap_page, heap_frame];
+        let mut ptr_array: [u32; Self::ARRAY_SIZE] = [0; Self::ARRAY_SIZE];
 
         if let Some(addr) = kmalloc(size_of::<PageDirectory>()){
             ptr_array[0] = addr;
         }
         else{
-            return Err(());
+            return None;
         }
 
-        for i in 1..array_size {
-            if let Some( mut addr) = alloc_page(bytes_array[i-1] as usize) {
+        for i in Self::ARRAY_OFFSET..Self::ARRAY_SIZE {
+            if let Some( mut addr) = alloc_page(bytes_array[i-Self::ARRAY_OFFSET] as usize) {
                 ptr_array[i] = addr;
             }
             else{
-                return Err(());
+                return None;
             }
         }
+        Some(ptr_array)
+    }
+
+    fn init_pages(&self, dir_addr: u32, dir_data: u32, code_init: u32, code_size: u32) -> Result<(),u8>{
         unsafe{
+            let dir_ptr = dir_addr as *mut PageDirectory;
+                (*dir_ptr).init(dir_data);
+                
+                if let Err(..) = map_code(dir_ptr, code_init, code_size){
+                    return Err(1);
+                }
+        }
+        Ok(())
+        
+    }
 
-            let dir_ptr = ptr_array[0] as *mut PageDirectory;
-            (*dir_ptr).init(ptr_array[1]);
+    fn init(&mut self, code_init: u32, code_size: u32) -> Result<(),u8> {
+        let stack_size = FRAME_SIZE;
+        let stack_npage = ((stack_size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
+        let code_npage = ((code_size + FRAME_SIZE - 1) / FRAME_SIZE) as usize;
 
-            let stack = ptr_array[2];
-            let heap = ptr_array[4];
-            
-            if let Err(..) = map_code(dir_ptr, code_init, code_size){
-                return Err(());
+        self.code_text = 0x00000000;
+        self.heap = (code_npage as u32) << 22;
+        self.brk = self.heap + FRAME_SIZE;
+        self.stack_begin = 0xBFFFFFFC;
+        self.stack_limit = 0xC0000000 - stack_size;
+
+        if let Some(ptr_array) = self.init_alloc(stack_npage){
+            unsafe{
+                
+                let dir_ptr = ptr_array[0] as *mut PageDirectory;
+                self.dir = dir_ptr;
+                
+                self.init_pages(ptr_array[0], ptr_array[1], code_init, code_size)?;
+
+                let stack = ptr_array[2];
+                let heap = ptr_array[4];
+
+                let tb = stack as *mut PageTable;
+                (*tb).set_frame(1023, ptr_array[3] - 0xC0000000, 0x7);
+                (*dir_ptr).set_page(UserSpace::Kernel as usize - 1, stack, 0x7);
+                
+                let hp = heap as *mut PageTable;
+                (*hp).set_frame(0, ptr_array[5] - 0xC0000000, 0x7);
+                (*dir_ptr).set_page(code_npage, heap, 0x7);
+                
+                PID += 1;
+                self.pid = PID;
+                self.priority = 1;
+                self.state = ProcStatus::Embryo;
+                self.code_size = code_size;
+                self.sig_handlers = DEFAULT_SIG_HANDLERS;
+                self.pending = SignalQueue::new();
+                self.blocked = SignalQueue::new();
+                // let mut th = Thread::new();
+                // th.parent = self;
+                // self.threads[0] = th;
+                // self.thread_count = 1;
+                
             }
-
-            let tb = stack as *mut PageTable;
-            (*tb).set_frame(1023, ptr_array[3] - 0xC0000000, 0x7);
-            (*dir_ptr).set_page(UserSpace::Kernel as usize - 1, stack, 0x7);
-
-            let code_npage = ((code_size + FRAME_SIZE - 1) / FRAME_SIZE) as usize;
-
-            let hp = heap as *mut PageTable;
-            (*hp).set_frame(0, ptr_array[5] - 0xC0000000, 0x7);
-            (*dir_ptr).set_page(code_npage, heap, 0x7);
-
-            PID += 1;
-            self.pid = PID;
-            self.priority = 1;
-            self.dir = dir_ptr;
-            self.state = ProcStatus::Embryo;
-            self.code_text = 0x00000000;
-            self.code_size = code_size;
-            self.heap = (code_npage as u32) << 22;
-            self.brk = self.heap + FRAME_SIZE;
-            self.stack_begin = 0xBFFFFFFC;
-            self.stack_limit = 0xC0000000 - FRAME_SIZE;
-            self.sig_handlers = DEFAULT_SIG_HANDLERS;
-            self.pending = SignalQueue::new();
-            self.blocked = SignalQueue::new();
-            // let mut th = Thread::new();
-            // th.parent = self;
-            // self.threads[0] = th;
-            // self.thread_count = 1;
-            
+        }
+        else{
+            return Err(0);
         }
         Ok(())
     }
 
-    pub fn get_cr3(&self) -> usize {
-        unsafe{(*self.dir).get_directory()}
+    fn import(&mut self, src: &Self) -> Result<(),u8> {
+        let stack_size = (*src).get_stack_size();
+        let stack_npage = ((stack_size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
+        let code_npage = (((*src).code_size + FRAME_SIZE - 1) / FRAME_SIZE) as usize;
+        
+        self.stack_begin = (*src).stack_begin;
+        self.stack_limit = (*src).stack_limit;
+        self.code_text = (*src).code_text;
+        self.heap = (*src).heap;
+        self.brk = (*src).brk;
+
+        if let Some(addr) = kmalloc(size_of::<PageDirectory>()){
+            unsafe{
+                
+                let dir_ptr = addr as *mut PageDirectory;
+                self.dir = dir_ptr;
+
+                let mut dir_data;
+                if let Some(data) = alloc_page(FRAME_SIZE as usize) {
+                    dir_data = data;
+                }
+                else{
+                    return Err(1);
+                }
+                
+                self.init_pages(addr, dir_data,(*src).code_text, (*src).code_size)?;
+
+                self.copy_memory((*src).stack_limit, (*src).stack_begin)?;
+                self.copy_memory((*src).heap, (*src).brk)?;
+                
+                PID += 1;
+                self.pid = PID;
+                self.state = ProcStatus::Embryo;
+                self.priority = (*src).priority;
+                self.code_size = (*src).code_size;
+                self.sig_handlers = (*src).sig_handlers;
+                self.pending = SignalQueue::new();
+                self.blocked = SignalQueue::new();
+                self.owner = (*src).owner;
+            }
+        }
+        else{
+            return Err(0);
+        }
+        Ok(())
+    }
+}
+
+impl ProcessControlBlock{
+    fn copy_memory(&mut self, start: u32, end: u32) -> Result<(), u8>{
+        let mut curr = start;
+        let mut start_index: usize = (start >> 22) as usize;
+        let end_index: usize = (end >> 22) as usize;
+    
+        unsafe{
+            let dir = self.get_dir();
+            while start_index < end_index {
+                if let Some(target) = alloc_page(FRAME_SIZE as usize){
+    
+                    dir.set_page(start_index, target, 0x7);
+                    start_index += 1;
+                }
+                else{
+                    return Err(1);
+                }
+            }
+            
+            while curr < end{
+                
+                if let Some(addr) = alloc_page(FRAME_SIZE as usize){
+                    let frame = addr as *mut u32;
+                    let dir_index = curr >> 22;
+                    let tab_index = (curr >> 12) & 0x3FF;
+                    let tb = dir.get_page(dir_index as usize) as *mut PageTable;
+                    
+                    (*tb).set_frame(tab_index as usize, addr, 0x7);
+                    for i in 0..4096{
+                        let target = (curr + i) as *const u32;
+                        *((addr + i) as *mut u32) = *target;
+                    }
+                    curr += FRAME_SIZE;
+                }
+                else{
+                    return Err(1);
+                }
+            }
+        }
+        Ok(())
     }
 
-    pub fn get_parent(&self) -> *const ProcessControlBlock{
-        self.parent
+    fn  clean_memory(&self, start: u32, end: u32){
+        let mut curr = start;
+        let mut start_index: usize = (start >> 22) as usize;
+        let end_index: usize = (end >> 22) as usize;
+        while curr < end{
+            let target = get_physical_addr(curr as usize) + 0xC0000000;
+            free_page(target);
+            curr += FRAME_SIZE;
+        }
+        unsafe{
+            let dir = self.get_dir();
+            while start_index < end_index {
+                let target = dir.get_page(start_index);
+                free_page(target);
+                start_index += 1;
+            }
+        }
     }
-    
-    pub fn get_esp(&self) -> u32{
-        self.esp
-    }
-    
-    pub fn get_text(&self) -> u32{
-        self.code_text
-    }
-    
-    pub fn get_size(&self) -> u32{
-        self.code_size
-    }
-    
-    pub fn get_priority(&self) -> usize{
-        self.priority
-    }
-    
+}
+
+impl ProcessControlBlock{
     pub fn get_pid(&self) -> u32{
         self.pid
     }
 
-    pub fn get_state(&self) -> ProcStatus{
-        self.state
-    }
-
-    pub fn get_owner(&self) -> u32 {
-        self.owner
-    }
-
-    pub fn get_exit_code(&self) -> i32{
-        self.exit_code
-    }
-
-    pub fn get_handler(&self, sig: Sig) -> u32{
-        self.sig_handlers[sig as usize - 1]
-    }
-
-    pub fn get_heap(&self) -> usize {
-        self.heap as usize
+    pub fn get_priority(&self) -> usize{
+        self.priority
     }
 
     pub fn get_dir(&self) -> &mut PageDirectory {
@@ -209,10 +333,47 @@ impl ProcessControlBlock {
         }
     }
 
-    pub fn add_handler(&mut self, sig: Sig, handler: u32){
-        self.sig_handlers[sig as usize - 1] = handler;
+    pub fn get_state(&self) -> ProcStatus{
+        self.state
     }
 
+    pub fn get_parent(&self) -> *const ProcessControlBlock{
+        self.parent
+    }
+
+    pub fn get_text(&self) -> u32{
+        self.code_text
+    }
+
+    pub fn get_code_size(&self) -> u32{
+        self.code_size
+    }
+
+    pub fn get_heap(&self) -> usize {
+        self.heap as usize
+    }
+
+    pub fn get_owner(&self) -> u32 {
+        self.owner
+    }
+
+    pub fn get_brk(&self) -> usize {
+        self.brk as usize
+    }
+
+    pub fn get_exit_code(&self) -> i32{
+        self.exit_code
+    }
+
+    pub fn get_cr3(&self) -> usize {
+        unsafe{(*self.dir).get_directory()}
+    }
+
+    
+    pub fn get_esp(&self) -> u32{
+        self.esp
+    }
+    
     pub fn get_signal(&self) -> Option<Sig> {
         if let Some(pending_signal) = self.pending.get(){
             unsafe{
@@ -221,6 +382,18 @@ impl ProcessControlBlock {
             } 
         }
         None
+    }
+    
+    pub fn get_handler(&self, sig: Sig) -> u32{
+        self.sig_handlers[sig as usize - 1]
+    }
+
+    fn get_stack_size(&self) -> u32 {
+        0xC0000000 - self.stack_begin
+    }
+
+    fn get_heap_size(&self) -> u32 {
+        self.brk - self.heap
     }
 
     pub fn set_exit_code(&mut self, value: i32){
@@ -246,6 +419,10 @@ impl ProcessControlBlock {
         self.parent = parent;
     }
 
+    pub fn add_handler(&mut self, sig: Sig, handler: u32){
+        self.sig_handlers[sig as usize - 1] = handler;
+    }
+
     pub fn recv_sig(&mut self, signal: *const Signal){
         self.pending.insert(signal as *mut Signal);
     }
@@ -253,9 +430,9 @@ impl ProcessControlBlock {
     pub fn clean(&mut self) {
         self.pending.clean();
         self.blocked.clean();
-        clean(self.code_text, self.heap);
-        clean(self.stack_limit, 0xC0000000);
-        clean(self.heap, self.brk);
+        self.clean_memory(self.code_text, self.heap);
+        self.clean_memory(self.stack_limit, 0xC0000000);
+        self.clean_memory(self.heap, self.brk);
         free_page(self.get_cr3() as u32);
         kfree(self.dir as u32);
     }
@@ -461,16 +638,14 @@ pub unsafe fn sys_signal(sig: Sig, handler: u32) -> Option<u32>{
 pub unsafe fn sys_fork() -> Option<u32>{
     let parent_proc = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
     let start = (*parent_proc).get_text();
-    let size = (*parent_proc).get_size();
+    let size = (*parent_proc).get_code_size();
     let parent_pid = (*parent_proc).get_pid();
 
-    if let Some(child_proc) = ProcessControlBlock::new(start, size){
+    if let Some(child_proc) = ProcessControlBlock::clone(&*parent_proc){
         unsafe{
             (*parent_proc).add_child(child_proc);
             (*child_proc).set_parent(parent_proc);
             QUEUES[(*child_proc).get_priority()].insert(child_proc);
-
-           //copy stack
            //copy registers
            (*child_proc).set_state(ProcStatus::Runnable);
         }
