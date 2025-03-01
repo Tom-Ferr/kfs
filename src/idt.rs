@@ -3,6 +3,7 @@ use core::arch::asm;
 
 use crate::io::outb;
 use crate::syscalls::syscall_handler;
+use crate::get_reg;
 
 #[allow(dead_code)]
 extern "C" {
@@ -110,6 +111,7 @@ static EXCEPT_MSG: [&str; 32] = [
 ];
 
 #[repr(C, packed)]
+#[derive(Copy, Clone, Default)]
 pub struct IntReg{
     cr2: u32,
     ds: u32,
@@ -131,6 +133,15 @@ pub struct IntReg{
 }
 
 impl IntReg{
+
+    pub fn set_eax(&mut self, value: u32) {
+        self.eax = value;
+    }
+
+    pub fn set_eip(&mut self, value: u32) {
+        self.eip = value;
+    }
+
     pub fn get_eax(&self) -> u32 {
         self.eax
     }
@@ -153,6 +164,10 @@ impl IntReg{
 
     pub fn get_edi(&self) -> u32 {
         self.edi
+    }
+
+    pub fn get_eip(&self) -> u32 {
+        self.eip
     }
 }
 
@@ -267,15 +282,15 @@ pub extern "C" fn irq_handler(regs: *const IntReg){
 }
 
 #[no_mangle]
-pub extern "C" fn isr_handler(regs: *const IntReg){
-    unsafe{
-        // let proc = crate::procs::current_proc.as_mut().unwrap();
-        // (**proc).set_space(crate::paging::UserSpace::Kernel);
+pub extern "C" fn isr_handler(regs: *mut IntReg){
 
+    unsafe{
+        let task = *(*crate::procs::CURRENT_TASK).as_mut().unwrap() as *mut crate::procs::ProcessControlBlock;
+        (*task).set_regs(*regs);
         let err_code = (*regs).err_code;
         match (*regs).int_no {
 
-            0..32 => panic!("{}, error code: {}", EXCEPT_MSG[(*regs).int_no as usize], err_code),
+            0..32 => panic!("{}, error code: {}, pid: {}, eip: {:#x}", EXCEPT_MSG[(*regs).int_no as usize], err_code, (*task).get_pid(), (*regs).get_eip()),
             0x80 => syscall_handler(regs),
             _   => {},
         }

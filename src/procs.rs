@@ -3,8 +3,10 @@ use crate::paging::*;
 use crate::queue::*;
 use crate::signals::*;
 use core::arch::asm;
+use crate::idt::IntReg;
 
 type ReadyQueue = Queue<ProcessControlBlock>;
+type ChildQueue = Queue<Child>;
 
 const MAX_THREAD: usize = 5;
 const MAX_PROCS: usize = 63;
@@ -57,6 +59,7 @@ pub struct ProcessControlBlock {
     stack_begin: u32,
     stack_limit: u32,
     exit_code: i32,
+    regs: IntReg,
     // thread_count: u32,
     // threadList: *const Thread,
     // threads: [Thread; MAX_THREAD],
@@ -75,7 +78,7 @@ impl ProcessControlBlock {
         if let Some(addr) = kmalloc(size_of::<ProcessControlBlock>()) {
             let ptr = addr as *mut Self;
             unsafe{
-
+                
                 if let Err(result) = (*ptr).init(code_init, code_size){
                     if result == 1{
                         kfree((*ptr).dir as u32);
@@ -148,13 +151,12 @@ impl ProcessControlBlock {
         Some(ptr_array)
     }
 
-    fn init_pages(&self, dir_addr: u32, dir_data: u32, code_init: u32, code_size: u32) -> Result<(),u8>{
+    fn init_dir(&self, dir_ptr: *mut PageDirectory, dir_data: u32, code_init: u32, code_size: u32) -> Result<(),u8>{
         unsafe{
-            let dir_ptr = dir_addr as *mut PageDirectory;
-                (*dir_ptr).init(dir_data);
-                
-                if let Err(..) = map_code(dir_ptr, code_init, code_size){
-                    return Err(1);
+            (*dir_ptr).init(dir_data);
+            
+            if let Err(..) = map_code(dir_ptr, code_init, code_size){
+                return Err(1);
                 }
         }
         Ok(())
@@ -172,24 +174,23 @@ impl ProcessControlBlock {
         self.stack_begin = 0xBFFFFFFC;
         self.stack_limit = 0xC0000000 - stack_size;
 
+        
         if let Some(ptr_array) = self.init_alloc(stack_npage){
             unsafe{
                 
                 let dir_ptr = ptr_array[0] as *mut PageDirectory;
                 self.dir = dir_ptr;
                 
-                self.init_pages(ptr_array[0], ptr_array[1], code_init, code_size)?;
-
+                let dir_data = ptr_array[1];
                 let stack = ptr_array[2];
+                let stack_frame = ptr_array[2];;
                 let heap = ptr_array[4];
-
-                let tb = stack as *mut PageTable;
-                (*tb).set_frame(1023, ptr_array[3] - 0xC0000000, 0x7);
-                (*dir_ptr).set_page(UserSpace::Kernel as usize - 1, stack, 0x7);
+                let heap_frame = ptr_array[5];
                 
-                let hp = heap as *mut PageTable;
-                (*hp).set_frame(0, ptr_array[5] - 0xC0000000, 0x7);
-                (*dir_ptr).set_page(code_npage, heap, 0x7);
+                self.init_dir(dir_ptr, dir_data, code_init, code_size)?;
+
+                self.init_memory(UserSpace::Kernel as usize - 1, stack_frame, 1023, ptr_array[3], 0x7);
+                self.init_memory(code_npage as usize, heap, 0, heap_frame, 0x7);
                 
                 PID += 1;
                 self.pid = PID;
@@ -199,6 +200,9 @@ impl ProcessControlBlock {
                 self.sig_handlers = DEFAULT_SIG_HANDLERS;
                 self.pending = SignalQueue::new();
                 self.blocked = SignalQueue::new();
+                self.children = ChildQueue::new();
+                self.owner = 42;
+                self.esp = self.stack_begin;
                 // let mut th = Thread::new();
                 // th.parent = self;
                 // self.threads[0] = th;
@@ -239,8 +243,9 @@ impl ProcessControlBlock {
                     return Err(1);
                 }
                 
-                self.init_pages(addr, dir_data,src.code_text + 0xC0000000, src.code_size)?;
-                self.copy_memory(src.stack_limit, src.stack_begin)?;
+                self.init_dir(dir_ptr, dir_data, src.code_text + 0xC0000000, src.code_size)?;
+
+                self.copy_memory(src.stack_limit, 0xC0000000)?;
                 self.copy_memory(src.heap, src.brk)?;
                 
                 PID += 1;
@@ -251,7 +256,9 @@ impl ProcessControlBlock {
                 self.sig_handlers = src.sig_handlers;
                 self.pending = SignalQueue::new();
                 self.blocked = SignalQueue::new();
+                self.children = ChildQueue::new();
                 self.owner = src.owner;
+                self.esp = self.stack_begin;
             }
         }
         else{
@@ -262,10 +269,23 @@ impl ProcessControlBlock {
 }
 
 impl ProcessControlBlock{
-    fn copy_memory(&mut self, start: u32, end: u32) -> Result<(), u8>{
+
+    fn init_memory(&self, dir_index: usize, page: u32, tab_index: usize, frame: u32, flags: u32) {
+        unsafe{
+            let tb = page as *mut PageTable;
+            (*self.dir).set_page(dir_index, page, flags);
+            (*tb).set_frame(tab_index, frame - 0xC0000000, flags);
+        }
+    }
+
+    fn copy_memory(&self, start: u32, end: u32) -> Result<(), u8>{
         let mut curr = start;
         let mut start_index: usize = (start >> 22) as usize;
-        let end_index: usize = (end >> 22) as usize;
+        let mut end_index: usize = (end >> 22) as usize;
+
+        if start_index == end_index{
+            end_index += 1;
+        }
     
         unsafe{
             let dir = &mut *DIR;
@@ -282,16 +302,15 @@ impl ProcessControlBlock{
             
             while curr < end{
                 
-                if let Some(addr) = alloc_page(FRAME_SIZE as usize){
-                    let frame = addr as *mut u32;
+                if let Some(frame) = alloc_page(FRAME_SIZE as usize){
                     let dir_index = curr >> 22;
                     let tab_index = (curr >> 12) & 0x3FF;
-                    let tb = dir.get_page(dir_index as usize) as *mut PageTable;
+                    let table = dir.get_page(dir_index as usize) as *mut PageTable;
                     
-                    (*tb).set_frame(tab_index as usize, addr, 0x7);
-                    for i in 0..4096{
+                    (*table).set_frame(tab_index as usize, frame - 0xC0000000, 0x7);
+                    for i in (0..4096).step_by(4){
                         let target = (curr + i) as *const u32;
-                        *((addr + i) as *mut u32) = *target;
+                        *((frame + i) as *mut u32) = *target;
                     }
                     curr += FRAME_SIZE;
                 }
@@ -400,6 +419,10 @@ impl ProcessControlBlock{
     pub fn get_esp(&self) -> u32{
         self.esp
     }
+
+    pub fn get_regs(&self) -> IntReg{
+        self.regs
+    }
     
     pub fn get_signal(&self) -> Option<Sig> {
         if let Some(pending_signal) = self.pending.get(){
@@ -430,6 +453,11 @@ impl ProcessControlBlock{
     pub fn set_state(&mut self, new_state: ProcStatus){
         self.state = new_state;
     }
+
+    pub fn set_regs(&mut self, other: IntReg) {
+        self.regs = other;
+    }
+    
 
     pub fn set_esp(&mut self, esp: u32){
         self.esp = esp;
@@ -624,7 +652,8 @@ pub unsafe fn sys_exit(status: i32) {
         
         (*child).set_state(ProcStatus::Zombie);
 
-        crate::timer::switch_task()
+        let mut regs = (*parent).get_regs();
+        crate::timer::switch_task(& mut regs);
 }
 
 pub unsafe fn sys_getuid() -> u32 {
@@ -666,13 +695,17 @@ pub unsafe fn sys_fork() -> Option<u32>{
             (*parent_proc).add_child(child_proc);
             (*child_proc).set_parent(parent_proc);
             QUEUES[(*child_proc).get_priority()].insert(child_proc);
-           //copy registers
-           (*child_proc).set_state(ProcStatus::Runnable);
+            let mut regs = (*parent_proc).get_regs();
+            regs.set_eax(1337);
+            // regs.set_eip(0xc01d8771);
+            (*child_proc).set_regs(regs);
+            (*child_proc).set_state(ProcStatus::Runnable);
         }
         let current_proc = *CURRENT_PROC.as_ref().unwrap();
         if (*current_proc).get_pid() == parent_pid {
             return Some((*child_proc).get_pid());
         }
+        crate::io::put_vga_string(b"here");
         return Some(0);
     }
     None

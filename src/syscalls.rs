@@ -1,4 +1,5 @@
 use crate::idt::IntReg;
+use crate::procs::*;
 use core::arch::asm;
 
 pub unsafe fn write(ptr: *const u8, len: u32){
@@ -8,7 +9,7 @@ pub unsafe fn write(ptr: *const u8, len: u32){
     ", in("ebx")ptr, in("ecx")len);
 }
 
-pub fn syscall_handler(regs: *const IntReg){
+pub fn syscall_handler(regs: *mut IntReg){
     
     let eax: u32 = unsafe {(*regs).get_eax()};
     let ebx: u32 = unsafe {(*regs).get_ebx()};
@@ -17,6 +18,7 @@ pub fn syscall_handler(regs: *const IntReg){
     match eax{
         1 => unsafe {crate::io::_print_fmt_str(*(ebx as *const core::fmt::Arguments))},
         2 => unsafe {crate::io::put_vga_ptr(ebx as *const u8, ecx)},
-        _ => crate::printk!(INFO, "Nope"),
+        3 => unsafe {if let Some(child) = sys_fork(){ (*regs).set_eax(child) } else{(*regs).set_eax(u32::MAX)}},
+        _ => {crate::printk!(INFO, "Nope")},
     }
 }

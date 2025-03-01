@@ -34,10 +34,10 @@ pub fn sleep(){
     }
 }
 
-pub unsafe fn switch_task(){
+pub unsafe fn switch_task(_regs: *mut IntReg){
     if let Some(_) = *CURRENT_TASK{
         let prev_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
-        (*prev_task).set_esp(get_reg!(esp) as u32);
+        (*prev_task).set_regs(*_regs);
         (*prev_task).set_state(ProcStatus::Runnable);
         let prev_priority = (*prev_task).get_priority();
         QUEUES[prev_priority].roll();
@@ -51,9 +51,9 @@ pub unsafe fn switch_task(){
                         continue 'priority_queue;
                     }
                 }
-                change_process(Some(head));
+                change_process(Some(proc));
                 let next_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
-                asm!("mov esp, {}", in(reg)(*next_task).get_esp());
+                *_regs = (*next_task).get_regs();
                 return;
             }
         }
@@ -68,6 +68,6 @@ unsafe fn schedule(_regs: *const IntReg){
         }
     }
     if TICKS % 10 == 0{
-        switch_task();
+        switch_task(_regs as *mut IntReg);
     }
 }
