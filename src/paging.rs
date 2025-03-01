@@ -1,6 +1,6 @@
 use crate::io::*;
 
-pub static mut ORIGINAL_DIR: PageDirectory = PageDirectory{directory: 0 as *mut AlignedPage, whoami: UserSpace::Kernel, allocs: 0, virtual_allocs: 0};
+pub static mut ORIGINAL_DIR: PageDirectory = PageDirectory{directory: 0 as *mut AlignedPage, allocs: 0, virtual_allocs: 0};
 
 pub static mut DIR: *mut PageDirectory = unsafe{&mut ORIGINAL_DIR as *mut PageDirectory};
 
@@ -11,7 +11,7 @@ pub static mut BITMAP: [[u32;32];1024] = [[0;32];1024];
 #[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum UserSpace{
-    Virtual = 0x8c,
+    Virtual = 0x38c,
     Kernel = 0x300,
     User = 0x0,
 }
@@ -43,7 +43,7 @@ pub struct PageTable {
 impl PageTable {
     fn new(dir: &PageDirectory) -> &mut PageTable {
         unsafe{
-            let pt: &PageTable = &*(dir.get_page(dir.get_allocs()) as *const PageTable);
+            let pt: &PageTable = &*(dir.get_page(dir.get_allocs() + UserSpace::Kernel as usize) as *const PageTable);
             let frame: *mut PageTable = pt.get_frame(1023) as *mut PageTable;
             frame.write_volatile(Self {pages: AlignedPage::new()});
             &mut(*frame)
@@ -63,7 +63,6 @@ impl PageTable {
 #[repr(C)]
 pub struct PageDirectory {
     directory: *mut AlignedPage,
-    whoami: UserSpace,
     allocs: usize,
     virtual_allocs: usize,
 }
@@ -78,12 +77,11 @@ impl PageDirectory {
             #[allow(static_mut_refs)]
             let kern = (*DIR).directory;
             (*usr).data = (*kern).data;
+            
+            self.directory = usr;
+            self.allocs = (*DIR).allocs;
+            self.virtual_allocs = (*DIR).virtual_allocs;
         }
-        
-        self.directory = usr;
-        self.whoami = UserSpace::User;
-        self.allocs = 0;
-        self.virtual_allocs = 0;
     }
 
     const fn new(ptr: *const u32) -> Self{
@@ -93,7 +91,6 @@ impl PageDirectory {
         }
         Self {
             directory: aligned_page,
-            whoami: UserSpace::Kernel,
             allocs: 0,
             virtual_allocs: 0,
         }
@@ -101,7 +98,7 @@ impl PageDirectory {
 
     pub fn get_page(&self, offset: usize) -> u32{
         unsafe{
-            let pt = (*self.directory).data[self.whoami as usize + offset];
+            let pt = (*self.directory).data[offset];
             (pt & 0xfffff000) + 0xC0000000
         }
     }
@@ -118,17 +115,9 @@ impl PageDirectory {
         self.directory as usize
     }
 
-    pub fn get_whoami(&self) -> usize{
-        self.whoami as usize
-    }
-
-    pub fn set_whoami(&mut self, u: UserSpace) {
-        self.whoami = u;
-    }
-
     pub fn set_page(&mut self, index: usize, value: u32, flags: u32){
         unsafe{
-            (*self.directory).data[self.whoami as usize + index] = (value - 0xC0000000) | flags;
+            (*self.directory).data[index] = (value - 0xC0000000) | flags;
         }
     }
 
@@ -148,7 +137,7 @@ impl PageDirectory {
             addr += 4096;
         }
         unsafe {BITMAP[self.allocs + 1 + UserSpace::Kernel as usize][31] |= 1 << 31};
-        self.set_page(self.allocs + 1, (new_page as *const PageTable) as u32, 0x3);
+        self.set_page(self.allocs + 1 + UserSpace::Kernel as usize, (new_page as *const PageTable) as u32, 0x3);
         self.allocs += 1;
         Ok(())
     }
@@ -182,7 +171,7 @@ pub fn alloc_page(nbytes: usize) -> Option<u32> {
         let dir = &mut *DIR;
 
         for offset in 0..=dir.get_allocs(){
-            let tab = &mut *(dir.get_page(offset as usize) as *mut PageTable);
+            let tab = &mut *(dir.get_page(offset as usize + UserSpace::Kernel as usize) as *mut PageTable);
 
             for i in 0..1024 {
                 let byte_index: usize = i / 32;
@@ -200,7 +189,7 @@ pub fn alloc_page(nbytes: usize) -> Option<u32> {
             }
         }
         if let Ok(..) = dir.new_page() {
-            let tab = &mut *(dir.get_page(dir.get_allocs()) as *mut PageTable);
+            let tab = &mut *(dir.get_page(dir.get_allocs() + UserSpace::Kernel as usize) as *mut PageTable);
             BITMAP[dir.get_allocs() as usize + UserSpace::Kernel as usize][0] |= cursor;
             return Some(tab.get_frame(0));
         }
@@ -272,8 +261,7 @@ pub fn get_physical_addr(vaddr: usize) -> u32 {
     unsafe{
         #[allow(static_mut_refs)]
         let dir = &mut *DIR;
-        
-        let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
+        let tab = &mut *(dir.get_page(dir_index) as *mut PageTable);
         let frame = tab.get_frame(tab_index) - 0xC0000000;
         
         frame + offset as u32
@@ -281,21 +269,21 @@ pub fn get_physical_addr(vaddr: usize) -> u32 {
 }
 
 pub fn map_code(dest: *mut PageDirectory, src: u32, size: u32) -> Result<(),()> {
-    let mut f = src & 0xFFFFF000;
+    let mut vaddr = src & 0xFFFFF000;
     let code_npage = ((size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
     let code_end = src + size;
-    for i in 0..code_npage
+    for dir_index in 0..code_npage
     {
         unsafe{
-
-            if let Some(p) = alloc_page(0x1000) {
-                (*dest).set_page(i as usize, p, 0x5);
-                let tb = p as *mut PageTable;
-                for j in 0..1024
+            
+            if let Some(page) = alloc_page(FRAME_SIZE as usize) {
+                (*dest).set_page(dir_index as usize, page, 0x5);
+                let table = page as *mut PageTable;
+                for table_index in 0..1024
                 {
-                    (*tb).set_frame(j as usize, (f - 0xC0000000), 0x5);
-                    f += FRAME_SIZE;
-                    if f >= code_end{
+                    (*table).set_frame(table_index as usize, vaddr - 0xC0000000, 0x5);
+                    vaddr += FRAME_SIZE;
+                    if vaddr >= code_end{
                         break;
                     }
                 }
@@ -312,6 +300,5 @@ pub fn init_page_tables(){
     unsafe{
         let dir = (crate::get_reg!(cr3) as u32 + 0xC0000000) as *const u32;
         ORIGINAL_DIR = PageDirectory::new(dir);
-        // DIR = &mut FIRST_DIR as *mut PageDirectory;
     }
 }

@@ -431,13 +431,6 @@ impl ProcessControlBlock{
         self.state = new_state;
     }
 
-    pub fn set_space(&mut self, u: UserSpace){
-        unsafe{
-
-            (*self.dir).set_whoami(u);
-        }
-    }
-
     pub fn set_esp(&mut self, esp: u32){
         self.esp = esp;
     }

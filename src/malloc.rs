@@ -66,7 +66,7 @@ fn check_virtual_space(nbytes: usize) -> Option<u32>{
                 let target = cursor << bit_index;
                 if (BITMAP[UserSpace::Virtual as usize + offset as usize][byte_index] & target) == 0 {
                     if candidate == None{
-                        candidate = Some(( (UserSpace::Virtual as usize + offset + dir.get_whoami()) << 22 | i << 10) as u32);
+                        candidate = Some(( (UserSpace::Virtual as usize + offset) << 22 | i << 10) as u32);
                     }
                     nframes -= 32 - limit;
                     if nframes == 0 {
@@ -98,7 +98,7 @@ fn vmap(nbytes: usize, vaddr: u32) -> Result<(),()> {
             if let Some(addr) = alloc_page(FRAME_SIZE as usize){
                 let tab_index = (ptr >> 12 & 0x3FF) as usize;
                 let dir_index = (ptr >> 22) as usize;
-                let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
+                let tab = &mut *(dir.get_page(dir_index) as *mut PageTable);
                 tab.set_frame(tab_index, addr - 0xC0000000, 0x3);
                 ptr += FRAME_SIZE;
             }
@@ -107,7 +107,7 @@ fn vmap(nbytes: usize, vaddr: u32) -> Result<(),()> {
                 while begin != ptr{
                     let tab_index = (begin >> 12 & 0x3FF) as usize;
                     let dir_index = (begin >> 22) as usize;
-                    let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
+                    let tab = &mut *(dir.get_page(dir_index) as *mut PageTable);
                     let frame = tab.get_frame(tab_index);
                     free_page(frame);
                     begin += FRAME_SIZE;
@@ -347,7 +347,7 @@ fn umap(nbytes: usize, vaddr: u32, prot: i32) -> Result<(),()> {
             if let Some(addr) = alloc_page(FRAME_SIZE as usize){
                 let tab_index = (ptr >> 12 & 0x3FF) as usize;
                 let dir_index = (ptr >> 22) as usize;
-                let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
+                let tab = &mut *(dir.get_page(dir_index) as *mut PageTable);
                 tab.set_frame(tab_index, addr - 0xC0000000, prot as u32);
                 ptr += FRAME_SIZE;
             }
@@ -356,7 +356,7 @@ fn umap(nbytes: usize, vaddr: u32, prot: i32) -> Result<(),()> {
                 while begin != ptr{
                     let tab_index = (begin >> 12 & 0x3FF) as usize;
                     let dir_index = (begin >> 22) as usize;
-                    let tab = &mut *(dir.get_page(dir_index - dir.get_whoami()) as *mut PageTable);
+                    let tab = &mut *(dir.get_page(dir_index) as *mut PageTable);
                     let frame = tab.get_frame(tab_index);
                     free_page(frame);
                     begin += FRAME_SIZE;
