@@ -23,6 +23,7 @@ SECTIONS {
         *(.idt)
         *(.panic)
         *(.user_mode)
+        *(.syscalls)
     }
 
     kernel_rodata = .;

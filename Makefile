@@ -1,5 +1,5 @@
 BOOT_DIR = bootable_base/
-BOOT_FILES = boot.s multiboot_header.s gdt.s enable_paging.s idt.s panic.s user_mode.s
+BOOT_FILES = boot.s multiboot_header.s gdt.s enable_paging.s idt.s panic.s user_mode.s syscalls.s
 LINKER_FILE = ${BOOT_DIR}/linker.ld
 BOOT_SRC = $(addprefix $(BOOT_DIR), $(BOOT_FILES))
 

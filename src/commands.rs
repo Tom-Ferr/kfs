@@ -4,6 +4,10 @@ use crate::timer::sleep;
 
 use core::arch::asm;
 
+extern "C" {
+    fn fork() -> i32;
+}
+
 fn halt() -> ! {
     unsafe{
         loop {
@@ -28,7 +32,7 @@ fn shutdown() -> ! {
     }
 }
 
-pub const COMMANDS: [(&[u8], fn(u32)); 19] = [
+pub const COMMANDS: [(&[u8], fn(u32)); 20] = [
     (b"dark", |_: u32| color_mode(false)),
     (b"light", |_: u32| color_mode(true)),
     (b"cyan", |offset: u32| paint(offset, Color::Cyan as u8)),
@@ -48,4 +52,5 @@ pub const COMMANDS: [(&[u8], fn(u32)); 19] = [
     (b"azerty", |_: u32| set_azerty()),
     (b"qwerty", |_: u32| set_qwerty()),
     (b"sleep", |_: u32| sleep()),
+    (b"fork", |_: u32| unsafe{let ret = fork(); crate::printf!("forkret = {}\n", ret)}),
 ];
