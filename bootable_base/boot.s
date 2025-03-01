@@ -77,9 +77,9 @@ align 4096
 directory_table:
     resb 4096
 page_table:
-    resb 8192
+    resb 4096
 virtual_space:
-    resb 8192
+    resb 4096
 
 align 16
 stack_bottom:

@@ -165,8 +165,8 @@ impl ProcessControlBlock {
 
     fn init(&mut self, code_init: u32, code_size: u32) -> Result<(),u8> {
         let stack_size = FRAME_SIZE;
-        let stack_npage = ((stack_size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
-        let code_npage = ((code_size + FRAME_SIZE - 1) / FRAME_SIZE) as usize;
+        let stack_npage = ((stack_size + PAGE_SIZE - 1) / PAGE_SIZE) as u32;
+        let code_npage = ((code_size + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
 
         self.code_text = 0x00000000;
         self.heap = (code_npage as u32) << 22;
@@ -218,8 +218,8 @@ impl ProcessControlBlock {
 
     fn import(&mut self, src: &Self) -> Result<(),u8> {
         let stack_size = src.get_stack_size();
-        let stack_npage = ((stack_size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
-        let code_npage = ((src.code_size + FRAME_SIZE - 1) / FRAME_SIZE) as usize;
+        let stack_npage = ((stack_size + PAGE_SIZE - 1) / PAGE_SIZE) as u32;
+        let code_npage = ((src.code_size + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
         
         self.stack_begin = src.stack_begin;
         self.stack_limit = src.stack_limit;
@@ -697,7 +697,6 @@ pub unsafe fn sys_fork() -> Option<u32>{
             QUEUES[(*child_proc).get_priority()].insert(child_proc);
             let mut regs = (*parent_proc).get_regs();
             regs.set_eax(1337);
-            // regs.set_eip(0xc01d8771);
             (*child_proc).set_regs(regs);
             (*child_proc).set_state(ProcStatus::Runnable);
         }
@@ -711,13 +710,14 @@ pub unsafe fn sys_fork() -> Option<u32>{
     None
 }
 
-pub unsafe fn change_process(new_proc: Option<*const ProcessControlBlock>){
+pub unsafe fn change_process(new_proc: Option<*const ProcessControlBlock>) -> *const ProcessControlBlock {
     CURRENT_PROC = new_proc;
     let next_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
     DIR = (*next_task).get_dir() as *mut PageDirectory;
     let dir = (*next_task).get_cr3() - 0xC0000000;
     (*next_task).set_state(ProcStatus::Running);
     asm!("mov cr3, {}", in(reg) dir);
+    return next_task as *const ProcessControlBlock;
 }
 
 pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {

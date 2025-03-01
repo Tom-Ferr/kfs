@@ -6,6 +6,8 @@ pub static mut DIR: *mut PageDirectory = unsafe{&mut ORIGINAL_DIR as *mut PageDi
 
 pub const FRAME_SIZE: u32 = 0x1000;
 
+pub const PAGE_SIZE: u32 = 0x400000;
+
 pub static mut BITMAP: [[u32;32];1024] = [[0;32];1024];
 
 #[allow(dead_code)]
@@ -130,11 +132,11 @@ impl PageDirectory {
         let new_page: &mut PageTable = PageTable::new(self);
         let mut addr: u32 = 0;
 
-        addr += (self.allocs + 1 * 0x400000) as u32;
+        addr += (self.allocs + 1) as u32 * PAGE_SIZE;
 
         for i in 0..1024 {
             new_page.set_frame(i, addr, 0x3);
-            addr += 4096;
+            addr += FRAME_SIZE;
         }
         unsafe {BITMAP[self.allocs + 1 + UserSpace::Kernel as usize][31] |= 1 << 31};
         self.set_page(self.allocs + 1 + UserSpace::Kernel as usize, (new_page as *const PageTable) as u32, 0x3);
@@ -203,7 +205,7 @@ pub fn free_page(ptr: u32) {
 
         #[allow(static_mut_refs)]
         let dir = &mut *DIR;
-        let offset = ptr / 0x400000;
+        let offset = ptr / PAGE_SIZE;
         let frame_index: usize = ((ptr / FRAME_SIZE) % 1024) as usize;
         let byte_index: usize = frame_index / 32;
         let bit_index: usize = frame_index % 32;
@@ -219,8 +221,8 @@ pub fn block_pages(addr: u32, len: u32){
         let dir = &mut *DIR;
         let end = addr + len;
 
-        let _begin_offset = addr / 0x400000;
-        let _end_offset = end / 0x400000;
+        let _begin_offset = addr / PAGE_SIZE;
+        let _end_offset = end / PAGE_SIZE;
 
         let begin_frame_index = (addr / FRAME_SIZE) % 1024;
         let end_frame_index = (end / FRAME_SIZE) % 1024;
@@ -270,8 +272,9 @@ pub fn get_physical_addr(vaddr: usize) -> u32 {
 
 pub fn map_code(dest: *mut PageDirectory, src: u32, size: u32) -> Result<(),()> {
     let mut vaddr = src & 0xFFFFF000;
-    let code_npage = ((size + FRAME_SIZE - 1) / FRAME_SIZE) as u32;
+    let code_npage = ((size + PAGE_SIZE - 1) / PAGE_SIZE) as u32;
     let code_end = src + size;
+    
     for dir_index in 0..code_npage
     {
         unsafe{
