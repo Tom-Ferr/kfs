@@ -183,13 +183,13 @@ impl ProcessControlBlock {
                 
                 let dir_data = ptr_array[1];
                 let stack = ptr_array[2];
-                let stack_frame = ptr_array[2];;
+                let stack_frame = ptr_array[3];;
                 let heap = ptr_array[4];
                 let heap_frame = ptr_array[5];
                 
                 self.init_dir(dir_ptr, dir_data, code_init, code_size)?;
 
-                self.init_memory(UserSpace::Kernel as usize - 1, stack_frame, 1023, ptr_array[3], 0x7);
+                self.init_memory(UserSpace::Kernel as usize - 1, stack, 1023, stack_frame, 0x7);
                 self.init_memory(code_npage as usize, heap, 0, heap_frame, 0x7);
                 
                 PID += 1;
