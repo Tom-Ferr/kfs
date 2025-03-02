@@ -1,4 +1,7 @@
 use crate::get_reg;
+use crate::procs::{CURRENT_TASK, ProcessControlBlock};
+
+pub static mut  _TSS: TSS = TSS::new();
 
 #[repr(C, packed)]
 pub struct TSS {
@@ -97,4 +100,11 @@ impl TSS{
 	}
 }
 
-pub static mut  _TSS: TSS = TSS::new();
+#[no_mangle]
+pub extern "C" fn switch_tss(){
+	unsafe{
+		if let Some(current_task) = *CURRENT_TASK{
+			_TSS.set_stack((*current_task).get_kernel_ss(), (*current_task).get_kernel_esp());
+		}
+	}
+}

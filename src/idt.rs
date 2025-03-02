@@ -270,6 +270,8 @@ pub fn uninstall_irq_routine(index: usize){
 #[no_mangle]
 pub extern "C" fn irq_handler(regs: *const IntReg){
     unsafe{
+        let task = *(*crate::procs::CURRENT_TASK).as_mut().unwrap() as *mut crate::procs::ProcessControlBlock;
+        (*task).export_ebp();
 
         if let Some(handler) = IRQ_ROUTINES[((*regs).int_no - 32) as usize]{
             handler(regs);

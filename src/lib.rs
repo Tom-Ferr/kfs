@@ -28,7 +28,7 @@ use multiboot::apply_mmap_info;
 use idt::init_idt;
 use timer::init_timer;
 use keyboard::init_keyboard;
-use crate::procs::exec_fn;
+use crate::procs::{exec_fn, load_process};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
@@ -55,11 +55,6 @@ fn user_land() -> ! {
 pub extern "C" fn kernel(multiboot_info: u32) -> ! {
 
     init_gdt();
-    init_idt();
-    init_timer();
-    init_keyboard();
-    
-    welcome_screen();
 
     unsafe{
         let ks = &kernel_start as *const u32 as u32;
@@ -69,6 +64,14 @@ pub extern "C" fn kernel(multiboot_info: u32) -> ! {
         if let Err(..) = apply_mmap_info(multiboot_info + 0xC0000000, ks, ke){
             panic!();
         }
+        
+        load_process(0xC0000000, ke + 0xC0000000);
+        
+        init_idt();
+        init_timer();
+        init_keyboard();
+        
+        welcome_screen();
 
         exec_fn(0xC0000000, user_land as u32, ke);
         

@@ -119,6 +119,7 @@ isr_common:
     iret
 
 extern irq_handler
+extern switch_tss
 irq_common:
     pushad
     mov eax, ds
@@ -135,8 +136,7 @@ irq_common:
     push esp
     call irq_handler
 
-    ;mov eax, [_currentTask]
-    ;mov esp, [eax]
+    call switch_tss
 
     add esp, 8
     pop ebx

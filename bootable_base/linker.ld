@@ -49,6 +49,8 @@ SECTIONS {
         *(.bss.*)
     }
 
-    kernel_end = .;
+    .end : ALIGN (0x4){
+        kernel_end = . ;
+    }
 
 }

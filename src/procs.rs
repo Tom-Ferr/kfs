@@ -369,6 +369,46 @@ impl ProcessControlBlock{
     }
 }
 
+impl ProcessControlBlock {
+    pub fn load(kernel_start: u32, kernel_end: u32) -> Option<*mut Self> {
+        if let Some(addr) = kmalloc(size_of::<ProcessControlBlock>()) {
+            let ptr = addr as *mut Self;
+            unsafe{
+                
+                (*ptr).set(kernel_start, kernel_end);
+
+                if let Ok((..)) = Self::register(addr){
+                   return Some(ptr);
+                }
+            }
+        }
+        None
+    }
+
+    unsafe fn set(&mut self, kernel_start: u32, kernel_end: u32) {
+
+        self.code_text = kernel_start;
+        self.kernel_stack_begin = get_reg!(ebp) as u32;
+        self.kernel_stack_limit = self.kernel_stack_begin - (4 * FRAME_SIZE);
+        self.stack_begin = self.kernel_stack_begin;
+        self.stack_limit = self.kernel_stack_limit;
+        self.dir = DIR;
+   
+        PID += 1;
+        self.pid = PID;
+        self.priority = 1;
+        self.state = ProcStatus::Running;
+        self.code_size = kernel_end - kernel_start;
+        self.sig_handlers = DEFAULT_SIG_HANDLERS;
+        self.pending = SignalQueue::new();
+        self.blocked = SignalQueue::new();
+        self.children = ChildQueue::new();
+        self.owner = 42;
+        self.ss = 0x1b;
+        self.kernel_ss = 0x18;
+    }
+}
+
 impl ProcessControlBlock{
     pub fn get_pid(&self) -> u32{
         self.pid
@@ -482,6 +522,12 @@ impl ProcessControlBlock{
 
     pub fn recv_sig(&mut self, signal: *const Signal){
         self.pending.insert(signal as *mut Signal);
+    }
+
+    pub fn export_ebp(&self){
+        unsafe{
+            asm!("mov ebp, {}", in(reg)self.kernel_stack_begin + 4);
+        }
     }
 
     pub fn clean(&mut self) {
@@ -738,6 +784,16 @@ pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
             
             switch_to_user_mode(0xBFFFFFFC, func - 0xc0000000);
         }
+    }
+    else{
+        return Err(());
+    }
+    Ok(())
+}
+
+pub unsafe fn load_process(kernel_start: u32, kernel_end: u32) -> Result<(),()> {
+    if let Some(my_proc) = ProcessControlBlock::load(kernel_start, kernel_end){
+        CURRENT_PROC = Some(my_proc);
     }
     else{
         return Err(());
