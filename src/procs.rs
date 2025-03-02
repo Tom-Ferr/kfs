@@ -4,6 +4,7 @@ use crate::queue::*;
 use crate::signals::*;
 use core::arch::asm;
 use crate::idt::IntReg;
+use crate::get_reg;
 
 type ReadyQueue = Queue<ProcessControlBlock>;
 type ChildQueue = Queue<Child>;
@@ -58,20 +59,20 @@ pub struct ProcessControlBlock {
     brk: u32,
     stack_begin: u32,
     stack_limit: u32,
+    kernel_stack_begin: u32,
+    kernel_stack_limit: u32,
     exit_code: i32,
     regs: IntReg,
     // thread_count: u32,
     // threadList: *const Thread,
     // threads: [Thread; MAX_THREAD],
-    esp: u32,
     ss:  u32,
-    kernel_esp: u32,
     kernel_ss: u32,
 }
 
 impl ProcessControlBlock {
 
-    const ARRAY_SIZE: usize = 6;
+    const ARRAY_SIZE: usize = 8;
     const ARRAY_OFFSET: usize = 1;
 
     pub fn new(code_init: u32, code_size: u32) -> Option<*mut Self> {
@@ -124,13 +125,9 @@ impl ProcessControlBlock {
         None
     }
 
-    fn init_alloc(&self, stack_npage: u32) -> Option<[u32; Self::ARRAY_SIZE]>{
-        let dir_data = FRAME_SIZE;
-        let stack_frame = FRAME_SIZE;
-        let heap_page = FRAME_SIZE;
-        let heap_frame = FRAME_SIZE;
+    fn init_alloc(&self) -> Option<[u32; Self::ARRAY_SIZE]>{
 
-        let bytes_array: [u32; Self::ARRAY_SIZE - Self::ARRAY_OFFSET] = [dir_data, (stack_npage * (size_of::<PageTable>() as u32)), stack_frame, heap_page, heap_frame];
+        let bytes_array: [u32; Self::ARRAY_SIZE - Self::ARRAY_OFFSET] = [FRAME_SIZE; Self::ARRAY_SIZE - Self::ARRAY_OFFSET];
         let mut ptr_array: [u32; Self::ARRAY_SIZE] = [0; Self::ARRAY_SIZE];
 
         if let Some(addr) = kmalloc(size_of::<PageDirectory>()){
@@ -165,17 +162,18 @@ impl ProcessControlBlock {
 
     fn init(&mut self, code_init: u32, code_size: u32) -> Result<(),u8> {
         let stack_size = FRAME_SIZE;
-        let stack_npage = ((stack_size + PAGE_SIZE - 1) / PAGE_SIZE) as u32;
         let code_npage = ((code_size + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
 
         self.code_text = 0x00000000;
         self.heap = (code_npage as u32) << 22;
         self.brk = self.heap + FRAME_SIZE;
-        self.stack_begin = 0xBFFFFFFC;
-        self.stack_limit = 0xC0000000 - stack_size;
+        self.kernel_stack_begin = 0xC0000000 - 4;
+        self.kernel_stack_limit = 0xC0000000 - stack_size;
+        self.stack_begin = self.kernel_stack_begin - (4 * PAGE_SIZE);
+        self.stack_limit = self.kernel_stack_limit - (4 * PAGE_SIZE);
 
         
-        if let Some(ptr_array) = self.init_alloc(stack_npage){
+        if let Some(ptr_array) = self.init_alloc(){
             unsafe{
                 
                 let dir_ptr = ptr_array[0] as *mut PageDirectory;
@@ -186,11 +184,14 @@ impl ProcessControlBlock {
                 let stack_frame = ptr_array[3];;
                 let heap = ptr_array[4];
                 let heap_frame = ptr_array[5];
+                let kernel_stack = ptr_array[6];
+                let kernel_stack_frame = ptr_array[7];
                 
                 self.init_dir(dir_ptr, dir_data, code_init, code_size)?;
 
-                self.init_memory(UserSpace::Kernel as usize - 1, stack, 1023, stack_frame, 0x7);
+                self.init_memory(UserSpace::Kernel as usize - 5, stack, 1023, stack_frame, 0x7);
                 self.init_memory(code_npage as usize, heap, 0, heap_frame, 0x7);
+                self.init_memory(UserSpace::Kernel as usize - 1, kernel_stack, 1023, kernel_stack_frame, 0x3);
                 
                 PID += 1;
                 self.pid = PID;
@@ -202,7 +203,8 @@ impl ProcessControlBlock {
                 self.blocked = SignalQueue::new();
                 self.children = ChildQueue::new();
                 self.owner = 42;
-                self.esp = self.stack_begin;
+                self.ss = 0x1b;
+                self.kernel_ss = 0x18;
                 // let mut th = Thread::new();
                 // th.parent = self;
                 // self.threads[0] = th;
@@ -218,9 +220,10 @@ impl ProcessControlBlock {
 
     fn import(&mut self, src: &Self) -> Result<(),u8> {
         let stack_size = src.get_stack_size();
-        let stack_npage = ((stack_size + PAGE_SIZE - 1) / PAGE_SIZE) as u32;
         let code_npage = ((src.code_size + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
         
+        self.kernel_stack_begin = src.kernel_stack_begin;
+        self.kernel_stack_limit = src.kernel_stack_limit;
         self.stack_begin = src.stack_begin;
         self.stack_limit = src.stack_limit;
         self.code_text = src.code_text;
@@ -245,8 +248,9 @@ impl ProcessControlBlock {
                 
                 self.init_dir(dir_ptr, dir_data, src.code_text + 0xC0000000, src.code_size)?;
 
-                self.copy_memory(src.stack_limit, 0xC0000000)?;
+                self.copy_memory(src.stack_limit, self.stack_begin + 4)?;
                 self.copy_memory(src.heap, src.brk)?;
+                self.copy_memory(src.kernel_stack_limit, self.kernel_stack_begin + 4)?;
                 
                 PID += 1;
                 self.pid = PID;
@@ -258,7 +262,8 @@ impl ProcessControlBlock {
                 self.blocked = SignalQueue::new();
                 self.children = ChildQueue::new();
                 self.owner = src.owner;
-                self.esp = self.stack_begin;
+                self.ss = 0x1b;
+                self.kernel_ss = 0x18;
             }
         }
         else{
@@ -417,8 +422,17 @@ impl ProcessControlBlock{
 
     
     pub fn get_esp(&self) -> u32{
-        self.esp
+        self.stack_begin
     }
+
+    pub fn get_kernel_esp(&self) -> u32{
+        self.kernel_stack_begin
+    }
+
+    pub fn get_kernel_ss(&self) -> u32{
+        self.kernel_ss
+    }
+
 
     pub fn get_regs(&self) -> IntReg{
         self.regs
@@ -456,11 +470,6 @@ impl ProcessControlBlock{
 
     pub fn set_regs(&mut self, other: IntReg) {
         self.regs = other;
-    }
-    
-
-    pub fn set_esp(&mut self, esp: u32){
-        self.esp = esp;
     }
 
     pub fn set_parent(&mut self, parent: *const ProcessControlBlock){
