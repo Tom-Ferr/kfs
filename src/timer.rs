@@ -35,8 +35,8 @@ pub fn sleep(){
 }
 
 pub unsafe fn switch_task(_regs: *mut IntReg){
-    if let Some(_) = *CURRENT_TASK{
-        let prev_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
+    if let Some(ptr) = *CURRENT_TASK{
+        let prev_task = ptr as *mut ProcessControlBlock;
         (*prev_task).set_regs(*_regs);
         (*prev_task).set_state(ProcStatus::Runnable);
         let prev_priority = (*prev_task).get_priority();

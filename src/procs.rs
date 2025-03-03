@@ -233,9 +233,9 @@ impl ProcessControlBlock {
                 
                 self.init_dir(dir_ptr, dir_data, src.code_text + 0xC0000000, src.code_size)?;
 
-                self.copy_memory(dir_ptr, src.stack_limit, src.stack_begin + 4)?;
-                self.copy_memory(dir_ptr, src.heap, src.brk)?;
-                self.copy_memory(dir_ptr, src.kernel_stack_limit, src.kernel_stack_begin + 4)?;
+                self.copy_memory(dir_ptr, src.stack_limit, src.stack_begin + 4, 0x7)?;
+                self.copy_memory(dir_ptr, src.heap, src.brk, 0x7)?;
+                self.copy_memory(dir_ptr, src.kernel_stack_limit, src.kernel_stack_begin + 4, 0x3)?;
                 
                 PID += 1;
                 self.pid = PID;
@@ -249,6 +249,7 @@ impl ProcessControlBlock {
                 self.owner = src.owner;
                 self.ss = 0x33;
                 self.kernel_ss = 0x18;
+                // self.kernel_stack = kernel_stack;
             }
         }
         else{
@@ -272,9 +273,9 @@ impl ProcessControlBlock{
         unsafe{
             let dir = &mut *dir_ptr;
             while start_index < end_index {
-                if let Some(target) = alloc_page(FRAME_SIZE as usize){
+                if let Some(page) = alloc_page(FRAME_SIZE as usize){
     
-                    dir.set_page(start_index, target, flags);
+                    dir.set_page(start_index, page, flags);
                     start_index += 1;
                 }
                 else{
@@ -300,7 +301,7 @@ impl ProcessControlBlock{
         Ok(())
     }
 
-    fn copy_memory(&self, dir_ptr: *mut PageDirectory, start: u32, end: u32) -> Result<(), u8>{
+    fn copy_memory(&self, dir_ptr: *mut PageDirectory, start: u32, end: u32, flags: u32) -> Result<(), u8>{
         let mut curr = start;
         let mut start_index: usize = (start >> 22) as usize;
         let mut end_index: usize = (end >> 22) as usize;
@@ -312,9 +313,9 @@ impl ProcessControlBlock{
         unsafe{
             let dir = &mut *dir_ptr;
             while start_index < end_index {
-                if let Some(target) = alloc_page(FRAME_SIZE as usize){
+                if let Some(page) = alloc_page(FRAME_SIZE as usize){
     
-                    dir.set_page(start_index, target, 0x7);
+                    dir.set_page(start_index, page, flags);
                     start_index += 1;
                 }
                 else{
@@ -329,7 +330,7 @@ impl ProcessControlBlock{
                     let tab_index = (curr >> 12) & 0x3FF;
                     let table = dir.get_page(dir_index as usize) as *mut PageTable;
                     
-                    (*table).set_frame(tab_index as usize, frame - 0xC0000000, 0x7);
+                    (*table).set_frame(tab_index as usize, frame - 0xC0000000, flags);
                     for i in (0..FRAME_SIZE).step_by(4){
                         let target = (curr + i) as *const u32;
                         *((frame + i) as *mut u32) = *target;
@@ -790,7 +791,7 @@ pub unsafe fn change_process(new_proc: Option<*const ProcessControlBlock>) -> *c
     let dir = (*next_task).get_cr3() - 0xC0000000;
     (*next_task).set_state(ProcStatus::Running);
     asm!("mov cr3, {}", in(reg) dir);
-    return next_task as *const ProcessControlBlock;
+    next_task as *const ProcessControlBlock
 }
 
 pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
