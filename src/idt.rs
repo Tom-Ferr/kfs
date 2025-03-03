@@ -4,6 +4,7 @@ use core::arch::asm;
 use crate::io::outb;
 use crate::syscalls::syscall_handler;
 use crate::get_reg;
+use crate::procs::{CURRENT_TASK, ProcessControlBlock};
 
 #[allow(dead_code)]
 extern "C" {
@@ -268,30 +269,26 @@ pub fn uninstall_irq_routine(index: usize){
 }
 
 #[no_mangle]
-pub extern "C" fn irq_handler(regs: *const IntReg){
-    unsafe{
-        let task = *(*crate::procs::CURRENT_TASK).as_mut().unwrap() as *mut crate::procs::ProcessControlBlock;
+pub unsafe extern "C" fn irq_handler(regs: *const IntReg){
+    if let Some(task) = *CURRENT_TASK{
         (*task).export_ebp();
-
-        if let Some(handler) = IRQ_ROUTINES[((*regs).int_no - 32) as usize]{
-            handler(regs);
-        }
-        if (*regs).int_no >= 40{
-            outb(0xA0, 0x20);
-        }
-        outb(0x20, 0x20);
     }
+    if let Some(handler) = IRQ_ROUTINES[((*regs).int_no - 32) as usize]{
+        handler(regs);
+    }
+    if (*regs).int_no >= 40{
+        outb(0xA0, 0x20);
+    }
+    outb(0x20, 0x20);
 }
 
 #[no_mangle]
-pub extern "C" fn isr_handler(regs: *mut IntReg){
-
-    unsafe{
-        let task = *(*crate::procs::CURRENT_TASK).as_mut().unwrap() as *mut crate::procs::ProcessControlBlock;
-        (*task).set_regs(*regs);
+pub unsafe extern "C" fn isr_handler(regs: *mut IntReg){
+    if let Some(task) = *CURRENT_TASK{
+        (*(task as *mut ProcessControlBlock)).set_regs(*regs);
         let err_code = (*regs).err_code;
         match (*regs).int_no {
-
+                
             0..32 => panic!("{}, error code: {}, pid: {}, eip: {:#x}", EXCEPT_MSG[(*regs).int_no as usize], err_code, (*task).get_pid(), (*regs).get_eip()),
             0x80 => syscall_handler(regs),
             _   => {},

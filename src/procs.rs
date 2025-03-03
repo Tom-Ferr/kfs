@@ -203,7 +203,7 @@ impl ProcessControlBlock {
                 self.blocked = SignalQueue::new();
                 self.children = ChildQueue::new();
                 self.owner = 42;
-                self.ss = 0x1b;
+                self.ss = 0x33;
                 self.kernel_ss = 0x18;
                 // let mut th = Thread::new();
                 // th.parent = self;
@@ -262,7 +262,7 @@ impl ProcessControlBlock {
                 self.blocked = SignalQueue::new();
                 self.children = ChildQueue::new();
                 self.owner = src.owner;
-                self.ss = 0x1b;
+                self.ss = 0x33;
                 self.kernel_ss = 0x18;
             }
         }
@@ -388,7 +388,7 @@ impl ProcessControlBlock {
     unsafe fn set(&mut self, kernel_start: u32, kernel_end: u32) {
 
         self.code_text = kernel_start;
-        self.kernel_stack_begin = get_reg!(ebp) as u32;
+        self.kernel_stack_begin = get_reg!(ebp) as u32 -4;
         self.kernel_stack_limit = self.kernel_stack_begin - (4 * FRAME_SIZE);
         self.stack_begin = self.kernel_stack_begin;
         self.stack_limit = self.kernel_stack_limit;
@@ -404,7 +404,7 @@ impl ProcessControlBlock {
         self.blocked = SignalQueue::new();
         self.children = ChildQueue::new();
         self.owner = 42;
-        self.ss = 0x1b;
+        self.ss = 0x33;
         self.kernel_ss = 0x18;
     }
 }
@@ -794,6 +794,7 @@ pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
 pub unsafe fn load_process(kernel_start: u32, kernel_end: u32) -> Result<(),()> {
     if let Some(my_proc) = ProcessControlBlock::load(kernel_start, kernel_end){
         CURRENT_PROC = Some(my_proc);
+        QUEUES[(*my_proc).get_priority()].insert(my_proc);
     }
     else{
         return Err(());

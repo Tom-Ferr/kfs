@@ -86,11 +86,11 @@ impl TSS{
 		self
 	}
 
-	pub fn set_ss0(&mut self, kernel_ss: u32){
+	fn set_ss0(&mut self, kernel_ss: u32){
 		self.ss0 = kernel_ss;
 	}
 
-	pub fn set_esp0(&mut self, kernel_esp: u32){
+	fn set_esp0(&mut self, kernel_esp: u32){
 		self.esp0 = kernel_esp;
 	}
 
