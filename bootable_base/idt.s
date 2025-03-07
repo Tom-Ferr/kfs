@@ -145,7 +145,27 @@ irq_common:
     mov fs, bx
     mov gs, bx
 
+    mov eax, [esp+44]
+    and eax, 3
+    cmp eax, 3
+    je .user_call
+
+.kernel_call
+    pop edi
+    pop esi
+    pop ebp
+    pop eax
+    pop ebx
+    pop edx
+    pop ecx
+    pop esp
+    xchg eax, esp
+    jmp .end
+
+.user_call
     popad
+
+.end
     add esp, 8
     sti
     iret

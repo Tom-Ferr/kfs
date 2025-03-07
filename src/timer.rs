@@ -51,8 +51,10 @@ pub unsafe fn switch_task(_regs: *mut IntReg){
                         continue 'priority_queue;
                     }
                 }
-                let next_task = change_process(Some(proc));
-                *_regs = (*next_task).get_regs();
+                (*(proc as *mut ProcessControlBlock)).change_process();
+                (*(proc as *mut ProcessControlBlock)).change_context();
+
+                *_regs = (*proc).get_regs();
                 return;
             }
         }

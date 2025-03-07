@@ -9,6 +9,15 @@ pub unsafe fn write(ptr: *const u8, len: u32){
     ", in("ebx")ptr, in("ecx")len);
 }
 
+pub unsafe fn fork2() -> i32{
+    let ret: i32;
+    asm!("
+        mov eax, 3
+        int 0x80
+    ", out("eax")ret);
+    ret
+}
+
 pub fn syscall_handler(regs: *mut IntReg){
     
     let eax: u32 = unsafe {(*regs).get_eax()};

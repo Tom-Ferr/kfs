@@ -143,6 +143,14 @@ impl IntReg{
         self.eip = value;
     }
 
+    pub fn set_esp(&mut self, value: u32) {
+        self.esp = value;
+    }
+
+    pub fn set_ebp(&mut self, value: u32) {
+        self.ebp = value;
+    }
+
     pub fn get_eax(&self) -> u32 {
         self.eax
     }
@@ -169,6 +177,14 @@ impl IntReg{
 
     pub fn get_eip(&self) -> u32 {
         self.eip
+    }
+
+    pub fn get_esp(&self) -> u32 {
+        self.esp
+    }
+
+    pub fn get_user_esp(&self) -> u32 {
+        self.useresp
     }
 }
 

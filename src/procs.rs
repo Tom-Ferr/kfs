@@ -154,12 +154,9 @@ impl ProcessControlBlock {
         self.code_text = 0x00000000;
         self.heap = (code_npage as u32) << 22;
         self.brk = self.heap + FRAME_SIZE;
-        self.kernel_stack_begin = 0xC0000000 - 4;
-        self.kernel_stack_limit = 0xC0000000 - stack_size;
-        self.stack_begin = self.kernel_stack_begin - (4 * PAGE_SIZE);
-        self.stack_limit = self.kernel_stack_limit - (4 * PAGE_SIZE);
+        self.stack_begin = 0xC0000000 - 4;
+        self.stack_limit = 0xC0000000 - stack_size;
 
-        
         if let Some(addr) = kmalloc(size_of::<PageDirectory>()){
             unsafe{
                 
@@ -173,12 +170,19 @@ impl ProcessControlBlock {
                 else{
                     return Err(1);
                 }
+
+                if let Some(stack) = alloc_page(stack_size as usize){
+                    self.kernel_stack_limit = stack;
+                    self.kernel_stack_begin = stack + stack_size - 4;
+                }
+                else{
+                    return Err(1);
+                }
                 
                 self.init_dir(dir_ptr, dir_data, code_init, code_size)?;
 
                 self.alloc_memory(dir_ptr, self.stack_limit, self.stack_begin + 4, 0x7)?;
                 self.alloc_memory(dir_ptr, self.heap, self.brk, 0x7)?;
-                self.alloc_memory(dir_ptr, self.kernel_stack_limit, self.kernel_stack_begin + 4, 0x3)?;
                 
                 PID += 1;
                 self.pid = PID;
@@ -207,13 +211,13 @@ impl ProcessControlBlock {
 
     fn import(&mut self, src: &Self) -> Result<(),u8> {
         
-        self.kernel_stack_begin = src.kernel_stack_begin;
-        self.kernel_stack_limit = src.kernel_stack_limit;
+        let stack_size = (src.stack_begin + 4) - src.stack_limit;
         self.stack_begin = src.stack_begin;
         self.stack_limit = src.stack_limit;
         self.code_text = src.code_text;
         self.heap = src.heap;
         self.brk = src.brk;
+        self.regs = src.regs;
 
         if let Some(addr) = kmalloc(size_of::<PageDirectory>()){
             unsafe{
@@ -222,6 +226,19 @@ impl ProcessControlBlock {
                 self.dir = dir_ptr;
 
                 self.copy_queue(&mut (*(src as *const Self as *mut Self)).pending)?;
+
+                if let Some(stack) = alloc_page(stack_size as usize){
+                    self.kernel_stack_limit = stack;
+                    self.kernel_stack_begin = stack + stack_size - 4;
+                }
+                else{
+                    return Err(1);
+                }
+
+                for i in (0..stack_size).step_by(4){
+                    *((self.kernel_stack_limit + i) as *mut u32) = *((src.kernel_stack_limit + i) as *mut u32);
+                }
+                
 
                 let mut dir_data;
                 if let Some(data) = alloc_page(FRAME_SIZE as usize) {
@@ -235,7 +252,6 @@ impl ProcessControlBlock {
 
                 self.copy_memory(dir_ptr, src.stack_limit, src.stack_begin + 4, 0x7)?;
                 self.copy_memory(dir_ptr, src.heap, src.brk, 0x7)?;
-                self.copy_memory(dir_ptr, src.kernel_stack_limit, src.kernel_stack_begin + 4, 0x3)?;
                 
                 PID += 1;
                 self.pid = PID;
@@ -487,6 +503,10 @@ impl ProcessControlBlock{
         self.kernel_stack_begin
     }
 
+    pub fn get_user_esp(&self) -> u32{
+        self.stack_begin
+    }
+
     pub fn get_kernel_ss(&self) -> u32{
         self.kernel_ss
     }
@@ -595,6 +615,23 @@ impl ProcessControlBlock{
 impl Drop for ProcessControlBlock {
     fn drop(&mut self) {
         self.fclean();
+    }
+}
+
+impl ProcessControlBlock {
+    pub fn change_process(&mut self) {
+        unsafe{
+            CURRENT_PROC = Some(self as *const Self);
+            DIR = self.dir as *mut PageDirectory;
+            self.state = ProcStatus::Running;
+        }
+    }
+
+    pub fn change_context(&self) {
+        unsafe{
+            let dir = self.get_cr3() - 0xC0000000;
+            asm!("mov cr3, {}", in(reg) dir);
+        }
     }
 }
 
@@ -769,39 +806,30 @@ pub unsafe fn sys_fork() -> Option<u32>{
             (*parent_proc).add_child(child_proc);
             (*child_proc).set_parent(parent_proc);
             QUEUES[(*child_proc).get_priority()].insert(child_proc);
+
             let mut regs = (*parent_proc).get_regs();
-            regs.set_eax(1337);
+            let offset = (*parent_proc).get_kernel_esp() - regs.get_esp();
+            regs.set_esp((*child_proc).get_kernel_esp() - offset);
+            regs.set_ebp((*child_proc).get_kernel_esp() + 4);
+            regs.set_eax(0);
+
             (*child_proc).set_regs(regs);
             (*child_proc).set_state(ProcStatus::Runnable);
         }
-        let current_proc = *CURRENT_PROC.as_ref().unwrap();
-        if (*current_proc).get_pid() == parent_pid {
-            return Some((*child_proc).get_pid());
-        }
-        crate::io::put_vga_string(b"here");
-        return Some(0);
+        return Some((*child_proc).get_pid());
     }
     None
 }
 
-pub unsafe fn change_process(new_proc: Option<*const ProcessControlBlock>) -> *const ProcessControlBlock {
-    CURRENT_PROC = new_proc;
-    let next_task = *(*CURRENT_TASK).as_mut().unwrap() as *mut ProcessControlBlock;
-    DIR = (*next_task).get_dir() as *mut PageDirectory;
-    let dir = (*next_task).get_cr3() - 0xC0000000;
-    (*next_task).set_state(ProcStatus::Running);
-    asm!("mov cr3, {}", in(reg) dir);
-    next_task as *const ProcessControlBlock
-}
-
 pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
-    if let Some(my_proc) = ProcessControlBlock::new(start, size){
+    if let Some(new_proc) = ProcessControlBlock::new(start, size){
         unsafe{
 
-            QUEUES[(*my_proc).get_priority()].insert(my_proc);
-            change_process(Some(my_proc));
+            QUEUES[(*new_proc).get_priority()].insert(new_proc);
+            (*new_proc).change_process();
+            (*new_proc).change_context();
             
-            switch_to_user_mode(0xBFFFFFFC, func - 0xc0000000);
+            switch_to_user_mode((*new_proc).get_user_esp(), func - 0xc0000000);
         }
     }
     else{

@@ -1,5 +1,6 @@
 use crate::get_reg;
 use crate::procs::{CURRENT_TASK, ProcessControlBlock};
+use core::arch::asm;
 
 pub static mut  _TSS: TSS = TSS::new();
 
@@ -94,6 +95,14 @@ impl TSS{
 		self.esp0 = kernel_esp;
 	}
 
+	fn set_ss2(&mut self, user_ss: u32){
+		self.ss2 = user_ss;
+	}
+
+	fn set_esp2(&mut self, user_esp: u32){
+		self.esp2 = user_esp;
+	}
+
 	pub fn set_stack(&mut self, kernel_ss: u32, kernel_esp: u32){
 		self.set_ss0(kernel_ss);
 		self.set_esp0(kernel_esp);
@@ -101,10 +110,8 @@ impl TSS{
 }
 
 #[no_mangle]
-pub extern "C" fn switch_tss(){
-	unsafe{
-		if let Some(current_task) = *CURRENT_TASK{
-			_TSS.set_stack((*current_task).get_kernel_ss(), (*current_task).get_kernel_esp());
-		}
+pub unsafe extern "C" fn switch_tss(){
+	if let Some(current_task) = *CURRENT_TASK{
+		_TSS.set_stack((*current_task).get_kernel_ss(), (*current_task).get_kernel_esp());
 	}
 }
