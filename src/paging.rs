@@ -270,35 +270,6 @@ pub fn get_physical_addr(vaddr: usize) -> u32 {
     }
 }
 
-pub fn map_code(dest: *mut PageDirectory, src: u32, size: u32) -> Result<(),()> {
-    let mut vaddr = src & 0xFFFFF000;
-    let code_npage = ((size + PAGE_SIZE - 1) / PAGE_SIZE) as u32;
-    let code_end = src + size;
-    
-    for dir_index in 0..code_npage
-    {
-        unsafe{
-            
-            if let Some(page) = alloc_page(FRAME_SIZE as usize) {
-                (*dest).set_page(dir_index as usize, page, 0x5);
-                let table = page as *mut PageTable;
-                for table_index in 0..1024
-                {
-                    (*table).set_frame(table_index as usize, vaddr - 0xC0000000, 0x5);
-                    vaddr += FRAME_SIZE;
-                    if vaddr >= code_end{
-                        break;
-                    }
-                }
-            }
-            else{
-                return Err(());
-            }
-        }
-    }
-    Ok(())
-}
-
 pub fn init_page_tables(){
     unsafe{
         let dir = (crate::get_reg!(cr3) as u32 + 0xC0000000) as *const u32;
