@@ -32,7 +32,7 @@ fn shutdown() -> ! {
     }
 }
 
-pub const COMMANDS: [(&[u8], fn(u32)); 20] = [
+pub const COMMANDS: [(&[u8], fn(u32)); 21] = [
     (b"dark", |_: u32| color_mode(false)),
     (b"light", |_: u32| color_mode(true)),
     (b"cyan", |offset: u32| paint(offset, Color::Cyan as u8)),
@@ -51,6 +51,7 @@ pub const COMMANDS: [(&[u8], fn(u32)); 20] = [
     (b"shutdown", |_: u32| shutdown()),
     (b"azerty", |_: u32| set_azerty()),
     (b"qwerty", |_: u32| set_qwerty()),
-    (b"sleep", |_: u32| sleep()),
-    (b"fork", |_: u32| unsafe{let ret = fork(); crate::printf!("forkret = {}\n", ret)}),
+    (b"sleep", |_: u32| sleep(20)),
+    (b"fork", |_: u32| unsafe{let ret = fork(); crate::printk!("forkret = {}\n", ret)}),
+    (b"test", |_: u32| unsafe{crate::procs::test()}),
 ];

@@ -107,7 +107,7 @@ pub fn welcome_screen() {
     put_vga_string(ASCII_ART);
 
 
-    crate::timer::sleep();
+    crate::timer::sleep(10);
 
     clear_vga();
     enable_cursor(true);

@@ -205,12 +205,12 @@ pub fn free_page(ptr: u32) {
 
         #[allow(static_mut_refs)]
         let dir = &mut *DIR;
-        let offset = ptr / PAGE_SIZE;
+        let dir_index: usize = (ptr / PAGE_SIZE) as usize;
         let frame_index: usize = ((ptr / FRAME_SIZE) % 1024) as usize;
         let byte_index: usize = frame_index / 32;
         let bit_index: usize = frame_index % 32;
-        
-        BITMAP[offset as usize + UserSpace::Kernel as usize][byte_index] &= !(1 << bit_index);
+
+        BITMAP[dir_index][byte_index] &= !(1 << bit_index);
     }
 }
 

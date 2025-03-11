@@ -22,7 +22,6 @@ pub static mut QUEUES: [ReadyQueue; NUMBER_OF_QUEUES] = [ReadyQueue::new(), Read
 
 pub static mut CURRENT_PROC: Option<*const ProcessControlBlock> = None;
 pub static mut CURRENT_TASK: *mut Option<*const ProcessControlBlock> = unsafe{&mut CURRENT_PROC as *mut Option<*const ProcessControlBlock>};
-// pub static mut CURRENT_THREAD: Thread = Thread::new();
 
 extern "C" {
     fn switch_to_user_mode(esp: u32, eip: u32);
@@ -63,9 +62,6 @@ pub struct ProcessControlBlock {
     kernel_stack_limit: u32,
     exit_code: i32,
     regs: IntReg,
-    // thread_count: u32,
-    // threadList: *const Thread,
-    // threads: [Thread; MAX_THREAD],
     ss:  u32,
     kernel_ss: u32,
 }
@@ -74,6 +70,9 @@ impl ProcessControlBlock {
 
     const ARRAY_SIZE: usize = 8;
     const ARRAY_OFFSET: usize = 1;
+
+    const NO_COPY: bool = false;
+    const COPY: bool = true;
 
     pub fn new(code_init: u32, code_size: u32) -> Option<*mut Self> {
         if let Some(addr) = kmalloc(size_of::<ProcessControlBlock>()) {
@@ -92,7 +91,7 @@ impl ProcessControlBlock {
                     }
                     (*ptr).pending.clean();
                     (*ptr).blocked.clean();
-                    (*ptr).clean_memory((*ptr).code_text, (*ptr).heap);
+                    (*ptr).clean_mapping((*ptr).code_text, (*ptr).heap);
                     (*ptr).clean_memory((*ptr).stack_limit, (*ptr).stack_begin + 4);
                     (*ptr).clean_memory((*ptr).heap, (*ptr).brk);
                     kfree(addr);
@@ -124,7 +123,7 @@ impl ProcessControlBlock {
                     }
                     (*ptr).pending.clean();
                     (*ptr).blocked.clean();
-                    (*ptr).clean_memory((*ptr).code_text, (*ptr).heap);
+                    (*ptr).clean_mapping((*ptr).code_text, (*ptr).heap);
                     (*ptr).clean_memory((*ptr).stack_limit, (*ptr).stack_begin + 4);
                     (*ptr).clean_memory((*ptr).heap, (*ptr).brk);
                     kfree(addr);
@@ -185,8 +184,8 @@ impl ProcessControlBlock {
                 
                 self.init_dir(dir_data, code_init, code_size)?;
 
-                self.map_memory(self.stack_limit, self.stack_begin + 4, 0x7, false)?;
-                self.map_memory(self.heap, self.brk, 0x7, false)?;
+                self.map_memory(self.stack_limit, self.stack_begin + 4, 0x7, Self::NO_COPY)?;
+                self.map_memory(self.heap, self.brk, 0x7, Self::NO_COPY)?;
                 
                 PID += 1;
                 self.pid = PID;
@@ -197,13 +196,10 @@ impl ProcessControlBlock {
                 self.pending = SignalQueue::new();
                 self.blocked = SignalQueue::new();
                 self.children = ChildQueue::new();
+                self.parent = *CURRENT_PROC.as_ref().unwrap() as *const Self;
                 self.owner = 42;
                 self.ss = 0x33;
                 self.kernel_ss = 0x18;
-                // let mut th = Thread::new();
-                // th.parent = self;
-                // self.threads[0] = th;
-                // self.thread_count = 1;
                 
             }
         }
@@ -254,8 +250,8 @@ impl ProcessControlBlock {
                 
                 self.init_dir(dir_data, src.code_text + 0xC0000000, src.code_size)?;
 
-                self.map_memory(src.stack_limit, src.stack_begin + 4, 0x7, true)?;
-                self.map_memory(src.heap, src.brk, 0x7, true)?;
+                self.map_memory(src.stack_limit, src.stack_begin + 4, 0x7, Self::COPY)?;
+                self.map_memory(src.heap, src.brk, 0x7, Self::COPY)?;
                 
                 PID += 1;
                 self.pid = PID;
@@ -266,10 +262,10 @@ impl ProcessControlBlock {
                 self.pending = SignalQueue::new();
                 self.blocked = SignalQueue::new();
                 self.children = ChildQueue::new();
+                self.parent = *CURRENT_PROC.as_ref().unwrap() as *const Self;
                 self.owner = src.owner;
                 self.ss = 0x33;
                 self.kernel_ss = 0x18;
-                // self.kernel_stack = kernel_stack;
             }
         }
         else{
@@ -295,11 +291,13 @@ impl ProcessControlBlock{
                     let table = page as *mut PageTable;
                     for table_index in 0..1024
                     {
-                        (*table).set_frame(table_index as usize, vaddr - 0xC0000000, 0x5);
-                        vaddr += FRAME_SIZE;
                         if vaddr >= code_end{
-                            break;
+                            (*table).set_frame(table_index as usize, vaddr - 0xC0000000, 0x0);
                         }
+                        else{
+                            (*table).set_frame(table_index as usize, vaddr - 0xC0000000, 0x5);
+                        }
+                        vaddr += FRAME_SIZE;
                     }
                 }
                 else{
@@ -356,23 +354,27 @@ impl ProcessControlBlock{
         Ok(())
     }
 
-    fn  clean_memory(&self, start: u32, end: u32){
-        let mut curr = start;
+    fn  clean_mapping(&self, start: u32, end: u32){
         let mut start_index: usize = (start >> 22) as usize;
         let end_index: usize = (end >> 22) as usize;
-        while curr < end{
-            let target = get_physical_addr(curr as usize) + 0xC0000000;
-            free_page(target);
-            curr += FRAME_SIZE;
-        }
         unsafe{
-            let dir = &mut *DIR;
+            let dir = &mut *self.dir;
             while start_index < end_index {
                 let target = dir.get_page(start_index);
                 free_page(target);
                 start_index += 1;
             }
         }
+    }
+
+    fn  clean_memory(&self, start: u32, end: u32){
+        let mut curr = start;
+        while curr < end{
+            let target = get_physical_addr(curr as usize) + 0xC0000000;
+            free_page(target);
+            curr += FRAME_SIZE;
+        }
+        self.clean_mapping(start, end);
     }
 
     fn copy_queue(&mut self, src: &mut SignalQueue) -> Result<(),u8>{
@@ -423,7 +425,6 @@ impl ProcessControlBlock {
         self.stack_limit = self.kernel_stack_limit;
         self.dir = DIR;
    
-        PID += 1;
         self.pid = PID;
         self.priority = 1;
         self.state = ProcStatus::Running;
@@ -566,7 +567,7 @@ impl ProcessControlBlock{
     pub fn clean(&mut self) {
         self.pending.clean();
         self.blocked.clean();
-        self.clean_memory(self.code_text, self.heap);
+        self.clean_mapping(self.code_text, self.heap);
         self.clean_memory(self.stack_limit, self.stack_begin + 4);
         self.clean_memory(self.kernel_stack_limit, self.kernel_stack_begin + 4);
         self.clean_memory(self.heap, self.brk);
@@ -679,46 +680,6 @@ impl Queuable for Child {
     }
 }
 
-// #[derive(Copy, Clone)]
-// struct Thread {
-//     esp: u32,
-//     ss:  u32,
-//     kernel_esp: u32,
-//     kernel_ss: u32,
-//     parent: *const ProcessControlBlock,
-//     priority: u32,
-//     state: ProcStatus,
-// }
-
-// impl Thread {
-//     fn new() -> Self {
-//         Self{
-//             esp: 0,
-//             ss: 0,
-//             kernel_esp: 0,
-//             kernel_ss: 0,
-//             parent: 0x0 as *const ProcessControlBlock,
-//             priority: 1,
-//             state: ProcStatus::Runnable,
-//         }
-//     }
-// }
-
-// #[derive(Default, Copy, Clone)]
-// struct TrapFrame {
-//     eax: u32,
-//     ebx: u32,
-//     ecx: u32,
-//     edx: u32,
-//     esi: u32,
-//     edi: u32,
-//     esp: u32,
-//     ebp: u32,
-//     eip: u32,
-//     cs: u32,
-//     flags: u32,
-// }
-
 pub unsafe fn sys_wait(status: &mut i32) -> Option<u32> {
     let parent = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
 
@@ -754,12 +715,13 @@ pub unsafe fn sys_exit(status: i32) {
         
         (*child).set_exit_code(status);
         
-        (*parent).set_state(ProcStatus::Runnable);
+        if (*parent).get_state() == ProcStatus::Sleeping{
+            (*parent).set_state(ProcStatus::Runnable);
+        }
         
         (*child).set_state(ProcStatus::Zombie);
 
-        let mut regs = (*parent).get_regs();
-        crate::timer::switch_task(& mut regs);
+        swtch();
 }
 
 pub unsafe fn sys_getuid() -> u32 {
@@ -819,10 +781,12 @@ pub unsafe fn sys_fork() -> Option<u32>{
 pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
     if let Some(new_proc) = ProcessControlBlock::new(start, size){
         unsafe{
-
+            let current = *CURRENT_PROC.as_ref().unwrap() as *mut ProcessControlBlock;
+            (*current).set_state(ProcStatus::Zombie);
             QUEUES[(*new_proc).get_priority()].insert(new_proc);
             (*new_proc).change_process();
             (*new_proc).change_context();
+            (*new_proc).set_state(ProcStatus::Running);
             
             switch_to_user_mode((*new_proc).get_user_esp(), func - 0xc0000000);
         }
@@ -842,4 +806,29 @@ pub unsafe fn load_process(kernel_start: u32, kernel_end: u32) -> Result<(),()> 
         return Err(());
     }
     Ok(())
+}
+
+extern "C" {
+    fn fork() -> i32;
+    fn exit(exit_code: u32);
+    fn swtch();
+}
+
+pub unsafe fn counter(){
+   for i in 0..20{
+    crate::printf!("count = {}\n", i);
+    crate::timer::sleep(1);
+   }
+   exit(0);
+}
+
+pub unsafe fn test(){
+    if let Some(current_proc) = *CURRENT_TASK{
+
+        let a = fork();
+        if a == 0 {
+            exec_fn((*current_proc).code_text + 0xc0000000, counter as u32, (*current_proc).code_size);
+            exit(0);
+        }
+    }
 }

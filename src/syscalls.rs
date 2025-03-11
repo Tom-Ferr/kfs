@@ -28,6 +28,9 @@ pub fn syscall_handler(regs: *mut IntReg){
         1 => unsafe {crate::io::_print_fmt_str(*(ebx as *const core::fmt::Arguments))},
         2 => unsafe {crate::io::put_vga_ptr(ebx as *const u8, ecx)},
         3 => unsafe {if let Some(child) = sys_fork(){ (*regs).set_eax(child) } else{(*regs).set_eax(u32::MAX)}},
+        4 => unsafe {sys_exit(ebx as i32)},
+        5 => unsafe {crate::timer::switch_task(regs)},
+        6 => unsafe {if let Some(proc) = *CURRENT_TASK {let pid = (*proc).get_pid(); (*regs).set_eax(pid)}},
         _ => {crate::printk!(INFO, "Nope")},
     }
 }

@@ -26,8 +26,8 @@ pub fn init_timer(){
     }
 }
 
-pub fn sleep(){
-    let time = 10 * 18;
+pub fn sleep(unit: u32){
+    let time = unit * 18;
     unsafe{
         let target = TICKS + (time as usize);
         while TICKS < target {}
@@ -38,7 +38,9 @@ pub unsafe fn switch_task(_regs: *mut IntReg){
     if let Some(ptr) = *CURRENT_TASK{
         let prev_task = ptr as *mut ProcessControlBlock;
         (*prev_task).set_regs(*_regs);
-        (*prev_task).set_state(ProcStatus::Runnable);
+        if (*prev_task).get_state() == ProcStatus::Running{
+            (*prev_task).set_state(ProcStatus::Runnable);
+        }
         let prev_priority = (*prev_task).get_priority();
         QUEUES[prev_priority].roll();
         'priority_queue: for next_priority in 0..NUMBER_OF_QUEUES{
