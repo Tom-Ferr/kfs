@@ -5,6 +5,7 @@ use crate::signals::*;
 use core::arch::asm;
 use crate::idt::IntReg;
 use crate::get_reg;
+use crate::syscalls::*;
 
 type ReadyQueue = Queue<ProcessControlBlock>;
 type ChildQueue = Queue<Child>;
@@ -680,7 +681,7 @@ impl Queuable for Child {
     }
 }
 
-pub unsafe fn sys_wait(status: &mut i32) -> Option<u32> {
+pub unsafe fn sys_wait(status: *mut i32) -> Option<u32> {
     let parent = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
 
     loop {
@@ -702,8 +703,8 @@ pub unsafe fn sys_wait(status: &mut i32) -> Option<u32> {
         else {
             return None;
         }
-
         (*parent).set_state(ProcStatus::Sleeping);
+        sys_yield(); 
     }
 }
 
@@ -721,7 +722,7 @@ pub unsafe fn sys_exit(status: i32) {
         
         (*child).set_state(ProcStatus::Zombie);
 
-        swtch();
+        sys_yield();
 }
 
 pub unsafe fn sys_getuid() -> u32 {
@@ -809,26 +810,64 @@ pub unsafe fn load_process(kernel_start: u32, kernel_end: u32) -> Result<(),()> 
 }
 
 extern "C" {
-    fn fork() -> i32;
-    fn exit(exit_code: u32);
-    fn swtch();
+    fn run_proc(regs: *const IntReg);
 }
 
-pub unsafe fn counter(){
-   for i in 0..20{
-    crate::printf!("count = {}\n", i);
-    crate::timer::sleep(1);
-   }
-   exit(0);
-}
-
-pub unsafe fn test(){
-    if let Some(current_proc) = *CURRENT_TASK{
-
-        let a = fork();
-        if a == 0 {
-            exec_fn((*current_proc).code_text + 0xc0000000, counter as u32, (*current_proc).code_size);
-            exit(0);
+pub unsafe fn sys_yield(){
+    if let Some(prev_proc) = *CURRENT_TASK{
+        let mut prev_regs = (*prev_proc).get_regs();
+        if let Some(proc) = crate::timer::switch_task(&prev_regs){
+            (*proc).change_process();
+            (*proc).change_context();
+            let regs = (*proc).get_regs();
+            run_proc(&regs);
         }
     }
 }
+
+pub unsafe fn counter(){
+    for i in 0..10{
+     crate::printf!("count = {}", i);
+     crate::timer::sleep(1);
+    }
+    exit(0);
+ }
+ 
+ pub unsafe fn test(){
+     if let Some(current_proc) = *CURRENT_TASK{
+ 
+         let a = fork();
+         if a == 0 {
+             exec_fn((*current_proc).code_text + 0xc0000000, counter as u32, (*current_proc).code_size);
+         }
+     }
+ }
+ 
+ pub unsafe fn another_user(){
+     loop{
+         crate::printf!("this is another process, pid: {}\n", crate::syscalls::get_pid());
+         crate::timer::sleep(15);
+     }
+ }
+ 
+ pub unsafe fn test_wait(){
+     if let Some(current_proc) = *CURRENT_TASK{
+ 
+         let a = fork();
+         if a == 0 {
+             exec_fn((*current_proc).code_text + 0xc0000000, wait_user as u32, (*current_proc).code_size);
+         }
+     }
+ }
+ 
+ pub unsafe fn wait_user(){
+     let a = fork();
+     if a == 0 {
+         counter();
+     }
+     let mut status: i32 = 0;
+     crate::printf!("waiting, pid: {}\n", get_pid());
+     wait(&mut status);
+     crate::printf!("exiting, pid: {}\n", get_pid());
+     exit(0);
+ }

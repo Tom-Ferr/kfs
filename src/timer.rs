@@ -34,7 +34,7 @@ pub fn sleep(unit: u32){
     }
 }
 
-pub unsafe fn switch_task(_regs: *mut IntReg){
+pub unsafe fn switch_task(_regs: *const IntReg) -> Option<*mut ProcessControlBlock>{
     if let Some(ptr) = *CURRENT_TASK{
         let prev_task = ptr as *mut ProcessControlBlock;
         (*prev_task).set_regs(*_regs);
@@ -53,14 +53,11 @@ pub unsafe fn switch_task(_regs: *mut IntReg){
                         continue 'priority_queue;
                     }
                 }
-                (*(proc as *mut ProcessControlBlock)).change_process();
-                (*(proc as *mut ProcessControlBlock)).change_context();
-
-                *_regs = (*proc).get_regs();
-                return;
+                return Some(proc as *mut ProcessControlBlock);
             }
         }
     }
+    None
 }
 
 unsafe fn schedule(_regs: *const IntReg){
@@ -71,6 +68,13 @@ unsafe fn schedule(_regs: *const IntReg){
         }
     }
     if TICKS % 10 == 0{
-        switch_task(_regs as *mut IntReg);
+        if let Some(proc) = switch_task(_regs){
+
+            (*proc).change_process();
+            (*proc).change_context();
+            
+            *(_regs as *mut IntReg) = (*proc).get_regs();
+            
+        }
     }
 }

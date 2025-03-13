@@ -183,6 +183,10 @@ impl IntReg{
         self.esp
     }
 
+    pub fn get_ebp(&self) -> u32 {
+        self.ebp
+    }
+
     pub fn get_user_esp(&self) -> u32 {
         self.useresp
     }

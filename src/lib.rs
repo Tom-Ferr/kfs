@@ -45,12 +45,11 @@ extern "C" {
     static kernel_start: u32;
     static kernel_end: u32;
     fn panic_halt() -> !;
-    fn get_pid() -> u32;
 }
 
 unsafe fn user_land() -> ! {
     loop{
-            printf!("user_land_pid_{}\n", get_pid());
+            printf!("user_land_pid_{}\n", crate::syscalls::get_pid());
             crate::timer::sleep(15);
     }
 }
