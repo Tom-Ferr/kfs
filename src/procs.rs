@@ -681,6 +681,22 @@ impl Queuable for Child {
     }
 }
 
+extern "C" {
+    fn run_proc(regs: *const IntReg);
+}
+
+pub unsafe fn sys_yield(){
+    if let Some(prev_proc) = *CURRENT_TASK{
+        let prev_regs = (*prev_proc).get_regs();
+        if let Some(proc) = crate::timer::switch_task(&prev_regs){
+            (*proc).change_process();
+            (*proc).change_context();
+            let regs = (*proc).get_regs();
+            run_proc(&regs);
+        }
+    }
+}
+
 pub unsafe fn sys_wait(status: *mut i32) -> Option<u32> {
     let parent = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
 
@@ -704,7 +720,7 @@ pub unsafe fn sys_wait(status: *mut i32) -> Option<u32> {
             return None;
         }
         (*parent).set_state(ProcStatus::Sleeping);
-        sys_yield(); 
+        call_yield(); 
     }
 }
 
@@ -809,25 +825,9 @@ pub unsafe fn load_process(kernel_start: u32, kernel_end: u32) -> Result<(),()> 
     Ok(())
 }
 
-extern "C" {
-    fn run_proc(regs: *const IntReg);
-}
-
-pub unsafe fn sys_yield(){
-    if let Some(prev_proc) = *CURRENT_TASK{
-        let mut prev_regs = (*prev_proc).get_regs();
-        if let Some(proc) = crate::timer::switch_task(&prev_regs){
-            (*proc).change_process();
-            (*proc).change_context();
-            let regs = (*proc).get_regs();
-            run_proc(&regs);
-        }
-    }
-}
-
 pub unsafe fn counter(){
-    for i in 0..10{
-     crate::printf!("count = {}", i);
+    for i in 0..20{
+     crate::printf!("count = {}\n", i);
      crate::timer::sleep(1);
     }
     exit(0);
@@ -867,7 +867,8 @@ pub unsafe fn counter(){
      }
      let mut status: i32 = 0;
      crate::printf!("waiting, pid: {}\n", get_pid());
-     wait(&mut status);
+     let child = wait(&mut status);
+     crate::printf!("child pid: {}, exited with value {}\n", child, status);
      crate::printf!("exiting, pid: {}\n", get_pid());
      exit(0);
  }

@@ -46,6 +46,13 @@ pub unsafe fn wait(wstatus: &mut i32) -> i32{
     ret
 }
 
+pub unsafe fn call_yield() {
+    asm!("
+        mov eax, 7
+        int 0x80
+    ");
+}
+
 pub fn syscall_handler(regs: *mut IntReg){
     
     let eax: u32 = unsafe {(*regs).get_eax()};
@@ -58,7 +65,8 @@ pub fn syscall_handler(regs: *mut IntReg){
         3 => unsafe {if let Some(child) = sys_fork(){ (*regs).set_eax(child) } else{(*regs).set_eax(u32::MAX)}},
         4 => unsafe {sys_exit(ebx as i32)},
         5 => unsafe {if let Some(proc) = *CURRENT_TASK {let pid = (*proc).get_pid(); (*regs).set_eax(pid)}},
-        6 => unsafe {if let Some(pid) = sys_wait(ebx as *mut i32){ (*regs).set_eax(pid) } else{(*regs).set_eax(u32::MAX)}},
+        6 => unsafe {let mut o_regs = *regs; if let Some(pid) = sys_wait(ebx as *mut i32){ o_regs.set_eax(pid); } else{o_regs.set_eax(u32::MAX)} *regs = o_regs},
+        7 => unsafe {sys_yield()},
         _ => {crate::printk!(INFO, "Nope")},
     }
 }

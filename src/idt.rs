@@ -112,7 +112,7 @@ static EXCEPT_MSG: [&str; 32] = [
 ];
 
 #[repr(C, packed)]
-#[derive(Copy, Clone, Default)]
+#[derive(Copy, Clone, Default, Debug)]
 pub struct IntReg{
     cr2: u32,
     ds: u32,
