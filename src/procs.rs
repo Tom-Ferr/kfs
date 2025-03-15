@@ -23,9 +23,11 @@ pub static mut QUEUES: [ReadyQueue; NUMBER_OF_QUEUES] = [ReadyQueue::new(), Read
 
 pub static mut CURRENT_PROC: Option<*const ProcessControlBlock> = None;
 pub static mut CURRENT_TASK: *mut Option<*const ProcessControlBlock> = unsafe{&mut CURRENT_PROC as *mut Option<*const ProcessControlBlock>};
+pub static mut INIT_PROC: Option<*const ProcessControlBlock> = None;
 
 extern "C" {
     fn switch_to_user_mode(esp: u32, eip: u32);
+    fn run_proc(regs: *const IntReg);
 }
 
 #[derive(Copy, Clone, PartialEq)]
@@ -667,6 +669,19 @@ impl ProcessControlBlock{
         self.children.remove();
     }
 
+    pub fn reparenting(&mut self){
+        unsafe{
+
+            if let Some(init) = INIT_PROC{
+                let mut_init = init as *mut ProcessControlBlock;
+                while let Some(child) = self.get_child(){
+                    (*mut_init).add_child(child);
+                    self.remove_child();
+                }
+            }
+        }
+    }
+
 }
 
 struct Child(ProcessControlBlock);
@@ -679,10 +694,6 @@ impl Queuable for Child {
     fn set_next(&mut self, value: *const Child){
         self.0.simbling = value;
     }
-}
-
-extern "C" {
-    fn run_proc(regs: *const IntReg);
 }
 
 pub unsafe fn sys_yield(){
@@ -709,6 +720,11 @@ pub unsafe fn sys_wait(status: *mut i32) -> Option<u32> {
                     *status = (*child).get_exit_code();
                     let pid = (*child).get_pid();
                     (*parent).remove_child();
+                    while QUEUES[(*child).get_priority()].get() != Some(child){
+                        QUEUES[(*child).get_priority()].roll();
+                    }
+                    QUEUES[(*child).get_priority()].remove();
+                    ProcessControlBlock::unregister(child as u32);
                     ProcessControlBlock::free(child as u32);
                     return Some(pid);
                 }
@@ -731,6 +747,8 @@ pub unsafe fn sys_exit(status: i32) {
         (*child).clean();
         
         (*child).set_exit_code(status);
+        
+        (*child).reparenting();
         
         if (*parent).get_state() == ProcStatus::Sleeping{
             (*parent).set_state(ProcStatus::Runnable);
@@ -826,7 +844,7 @@ pub unsafe fn load_process(kernel_start: u32, kernel_end: u32) -> Result<(),()> 
 }
 
 pub unsafe fn counter(){
-    for i in 0..20{
+    for i in 0..30{
      crate::printf!("count = {}\n", i);
      crate::timer::sleep(1);
     }
@@ -870,5 +888,16 @@ pub unsafe fn counter(){
      let child = wait(&mut status);
      crate::printf!("child pid: {}, exited with value {}\n", child, status);
      crate::printf!("exiting, pid: {}\n", get_pid());
-     exit(0);
+     another_user();
+ }
+
+ pub unsafe fn ps(){
+    for i in 0..MAX_PROCS {
+        let p = MY_PROCS[i];
+        if p == 0{
+            continue;
+        }
+        let proc = p as *const crate::procs::ProcessControlBlock;
+        crate::printf!("pid: {}, state: {}, i: {}\n", (*proc).get_pid(), (*proc).get_state() as u32, i);
+    }
  }

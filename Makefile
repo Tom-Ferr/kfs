@@ -25,6 +25,8 @@ GRUB = isofiles/boot/${NAME}
 
 RUST_PATH = $$HOME/.cargo/bin/
 
+DISASS = disassembled.debug
+
 %.o: %.s		
 		${ASM} ${ASM_FLAGS} $< -o $@
 
@@ -82,13 +84,18 @@ ${GRUB}: ${NAME}
 ${ISO}: ${GRUB_CFG} ${GRUB}
 	grub-mkrescue -o ${ISO} ./isofiles
 
+${DISASS}: ${NAME}
+	objdump -d ${NAME} > ${DISASS}
+
 build: ${ISO}
 
 run: all build
 	qemu-system-i386 -cdrom ${ISO}
 
+debug: ${DISASS} run
+
 clean:
-	${RUST_PATH}cargo clean; rm -f ${OBJS}
+	${RUST_PATH}cargo clean; rm -f ${OBJS} ${DISASS}
 
 fclean: clean
 	rm -f ${ISO} ${NAME} ${GRUB} Cargo.lock
