@@ -190,6 +190,10 @@ impl IntReg{
     pub fn get_user_esp(&self) -> u32 {
         self.useresp
     }
+
+    pub fn get_cr2(&self) -> u32 {
+        self.cr2
+    }
 }
 
 pub struct InterruptGuard {}
@@ -309,7 +313,7 @@ pub unsafe extern "C" fn isr_handler(regs: *mut IntReg){
         let err_code = (*regs).err_code;
         match (*regs).int_no {
                 
-            0..32 => panic!("{}, error code: {}, pid: {}, eip: {:#x}", EXCEPT_MSG[(*regs).int_no as usize], err_code, (*task).get_pid(), (*regs).get_eip()),
+            0..32 => panic!("{}, error code: {}, pid: {}, eip: {:#x}, at: {:#x}", EXCEPT_MSG[(*regs).int_no as usize], err_code, (*task).get_pid(), (*regs).get_eip(), (*regs).get_cr2()),
             0x80 => syscall_handler(regs),
             _   => {},
         }

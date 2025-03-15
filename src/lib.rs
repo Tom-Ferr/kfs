@@ -29,13 +29,13 @@ use idt::init_idt;
 use timer::init_timer;
 use keyboard::init_keyboard;
 use crate::procs::{exec_fn, load_process};
+use crate::syscalls::{fork, wait};
 
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     if let Some(location) = _info.location() {
         unsafe{
-            let cr2 = get_reg!(cr2) as u32;
-            printk!(ERROR, "{}, {}, {:#x}", location, _info.message(), cr2);
+            printk!(ERROR, "{}, {}", location, _info.message());
         }
     }
     unsafe { panic_halt(); }
@@ -45,6 +45,17 @@ extern "C" {
     static kernel_start: u32;
     static kernel_end: u32;
     fn panic_halt() -> !;
+}
+
+unsafe fn initial_task() -> ! {
+    let pid = fork();
+    if pid == 0{
+        user_land();
+    }
+    let mut status: i32 = 42;
+    loop{
+        wait(&mut status);
+    }
 }
 
 unsafe fn user_land() -> ! {
@@ -75,7 +86,7 @@ pub unsafe extern "C" fn kernel(multiboot_info: u32) -> ! {
         
     welcome_screen();
 
-    exec_fn(0xC0000000, user_land as u32, ke);
-        
+    exec_fn(0xC0000000, initial_task as u32, ke);
+
     panic!();
 }

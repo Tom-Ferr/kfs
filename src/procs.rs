@@ -835,6 +835,7 @@ pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
 pub unsafe fn load_process(kernel_start: u32, kernel_end: u32) -> Result<(),()> {
     if let Some(my_proc) = ProcessControlBlock::load(kernel_start, kernel_end){
         CURRENT_PROC = Some(my_proc);
+        INIT_PROC = CURRENT_PROC;
         QUEUES[(*my_proc).get_priority()].insert(my_proc);
     }
     else{
@@ -883,7 +884,7 @@ pub unsafe fn counter(){
      if a == 0 {
          counter();
      }
-     let mut status: i32 = 0;
+     let mut status: i32 = 42;
      crate::printf!("waiting, pid: {}\n", get_pid());
      let child = wait(&mut status);
      crate::printf!("child pid: {}, exited with value {}\n", child, status);
