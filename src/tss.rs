@@ -1,6 +1,5 @@
 use crate::get_reg;
-use crate::procs::{CURRENT_TASK, ProcessControlBlock};
-use core::arch::asm;
+use crate::procs::CURRENT_TASK;
 
 pub static mut  _TSS: TSS = TSS::new();
 
@@ -35,6 +34,7 @@ pub struct TSS {
 	iomap: u16,
 }
 
+#[allow(dead_code)]
 impl TSS{
 	const fn new() -> Self {
 		Self {
@@ -112,6 +112,7 @@ impl TSS{
 #[no_mangle]
 pub unsafe extern "C" fn switch_tss(){
 	if let Some(current_task) = *CURRENT_TASK{
+		#[allow(static_mut_refs)]
 		_TSS.set_stack((*current_task).get_kernel_ss(), (*current_task).get_kernel_esp());
 	}
 }

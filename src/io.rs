@@ -2,7 +2,6 @@ use core::arch::asm;
 use core::fmt;
 
 use crate::keyboard::{CURRENT_LAYOUT, ALT_LAYOUT, AZERTY_LAYOUT};
-use crate::idt::InterruptGuard;
 use crate::screens::CURRENT_SCREEN;
 use crate::utils;
 use crate::get_reg;
@@ -120,8 +119,11 @@ pub fn color_mode(light: bool) {
                 color = current;
             }
             *vga_buffer.offset(offset as isize + 1) = BACKGROUND_COLOR << 4 | color;
+            #[allow(static_mut_refs)]
             crate::screens::SCREEN1_BUFFER.update_color_mode((offset >> 1) as usize,  prev_text_color);
+            #[allow(static_mut_refs)]
             crate::screens::SCREEN2_BUFFER.update_color_mode((offset >> 1) as usize,  prev_text_color);
+            #[allow(static_mut_refs)]
             crate::screens::SCREEN3_BUFFER.update_color_mode((offset >> 1) as usize,  prev_text_color);
             offset += 2;
         }
@@ -244,6 +246,7 @@ pub fn _print_fmt_log(level: LogLevel, args: core::fmt::Arguments) {
     }
 }
 
+#[allow(dead_code)]
 pub fn call_write(string: &[u8]){
     let ptr = string.as_ptr();
     let len = string.len() as u32;

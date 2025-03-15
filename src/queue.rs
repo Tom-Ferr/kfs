@@ -57,11 +57,9 @@ impl<T: Queuable<Ptr=T>> Queue<T>{
 
     pub fn roll(&mut self){
         if !self.head.is_none(){
-            unsafe{
-                let head = *self.head.as_mut().unwrap() as *mut T;
-                self.remove();
-                self.insert(head);
-            }
+            let head = *self.head.as_mut().unwrap() as *mut T;
+            self.remove();
+            self.insert(head);
         }
     }
 

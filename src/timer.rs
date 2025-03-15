@@ -1,9 +1,7 @@
 use crate::io::outb;
 use crate::idt::{install_irq_routine, IntReg};
-use crate::get_reg;
 use crate::procs::*;
 use crate::queue::Queuable;
-use core::arch::asm;
 
 static mut TICKS: usize = 0;
 const FREQ: u32 = 100;

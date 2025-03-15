@@ -10,7 +10,6 @@ use crate::syscalls::*;
 type ReadyQueue = Queue<ProcessControlBlock>;
 type ChildQueue = Queue<Child>;
 
-const MAX_THREAD: usize = 5;
 const MAX_PROCS: usize = 63;
 
 pub static mut MY_PROCS: [u32; MAX_PROCS] = [0; MAX_PROCS];
@@ -22,14 +21,18 @@ static mut PID: u32 = 0;
 pub static mut QUEUES: [ReadyQueue; NUMBER_OF_QUEUES] = [ReadyQueue::new(), ReadyQueue::new(), ReadyQueue::new()];
 
 pub static mut CURRENT_PROC: Option<*const ProcessControlBlock> = None;
+#[allow(static_mut_refs)]
 pub static mut CURRENT_TASK: *mut Option<*const ProcessControlBlock> = unsafe{&mut CURRENT_PROC as *mut Option<*const ProcessControlBlock>};
 pub static mut INIT_PROC: Option<*const ProcessControlBlock> = None;
 
 extern "C" {
+    static kernel_rodata: u32;
+    static kernel_bss: u32;
     fn switch_to_user_mode(esp: u32, eip: u32);
     fn run_proc(regs: *const IntReg);
 }
 
+#[allow(dead_code)]
 #[derive(Copy, Clone, PartialEq)]
 pub enum ProcStatus{
     Unused,
@@ -69,10 +72,8 @@ pub struct ProcessControlBlock {
     kernel_ss: u32,
 }
 
+#[allow(dead_code)]
 impl ProcessControlBlock {
-
-    const ARRAY_SIZE: usize = 8;
-    const ARRAY_OFFSET: usize = 1;
 
     const NO_COPY: bool = false;
     const COPY: bool = true;
@@ -156,7 +157,7 @@ impl ProcessControlBlock {
     fn init(&mut self, code_init: u32, code_size: u32) -> Result<(),u8> {
         let stack_size = FRAME_SIZE * 4;
         let code_npage = ((code_size + PAGE_SIZE - 1) / PAGE_SIZE) as usize;
-
+        
         self.code_text = 0x00000000;
         self.heap = (code_npage as u32) << 22;
         self.brk = self.heap + FRAME_SIZE;
@@ -165,11 +166,12 @@ impl ProcessControlBlock {
 
         if let Some(addr) = kmalloc(size_of::<PageDirectory>()){
             unsafe{
-                
+                #[allow(static_mut_refs)]
+                let current_proc = *CURRENT_PROC.as_ref().unwrap() as *const Self;
                 let dir_ptr = addr as *mut PageDirectory;
                 self.dir = dir_ptr;
 
-                let mut dir_data;
+                let dir_data;
                 if let Some(data) = alloc_page(FRAME_SIZE as usize) {
                     dir_data = data;
                 }
@@ -199,10 +201,13 @@ impl ProcessControlBlock {
                 self.pending = SignalQueue::new();
                 self.blocked = SignalQueue::new();
                 self.children = ChildQueue::new();
-                self.parent = *CURRENT_PROC.as_ref().unwrap() as *const Self;
+                self.parent = current_proc;
                 self.owner = 42;
                 self.ss = 0x33;
                 self.kernel_ss = 0x18;
+
+                self.code_data = &kernel_rodata as *const u32 as u32 - 0xC0000000;
+                self.code_bss = &kernel_bss as *const u32 as u32 - 0xC0000000;
                 
             }
         }
@@ -218,13 +223,16 @@ impl ProcessControlBlock {
         self.stack_begin = src.stack_begin;
         self.stack_limit = src.stack_limit;
         self.code_text = src.code_text;
+        self.code_data = src.code_data;
+        self.code_bss = src.code_bss;
         self.heap = src.heap;
         self.brk = src.brk;
         self.regs = src.regs;
 
         if let Some(addr) = kmalloc(size_of::<PageDirectory>()){
             unsafe{
-                
+                #[allow(static_mut_refs)]
+                let current_proc = *CURRENT_PROC.as_ref().unwrap() as *const Self;
                 let dir_ptr = addr as *mut PageDirectory;
                 self.dir = dir_ptr;
 
@@ -243,7 +251,7 @@ impl ProcessControlBlock {
                 }
                 
 
-                let mut dir_data;
+                let dir_data;
                 if let Some(data) = alloc_page(FRAME_SIZE as usize) {
                     dir_data = data;
                 }
@@ -265,7 +273,7 @@ impl ProcessControlBlock {
                 self.pending = SignalQueue::new();
                 self.blocked = SignalQueue::new();
                 self.children = ChildQueue::new();
-                self.parent = *CURRENT_PROC.as_ref().unwrap() as *const Self;
+                self.parent = current_proc;
                 self.owner = src.owner;
                 self.ss = 0x33;
                 self.kernel_ss = 0x18;
@@ -422,6 +430,8 @@ impl ProcessControlBlock {
     unsafe fn set(&mut self, kernel_start: u32, kernel_end: u32) {
 
         self.code_text = kernel_start;
+        self.code_data = &kernel_rodata as *const u32 as u32 - 0xC0000000;
+        self.code_bss = &kernel_bss as *const u32 as u32 - 0xC0000000;
         self.kernel_stack_begin = get_reg!(ebp) as u32 -4;
         self.kernel_stack_limit = self.kernel_stack_begin - (4 * FRAME_SIZE);
         self.stack_begin = self.kernel_stack_begin;
@@ -442,6 +452,7 @@ impl ProcessControlBlock {
     }
 }
 
+#[allow(dead_code)]
 impl ProcessControlBlock{
     pub fn get_pid(&self) -> u32{
         self.pid
@@ -709,6 +720,7 @@ pub unsafe fn sys_yield(){
 }
 
 pub unsafe fn sys_wait(status: *mut i32) -> Option<u32> {
+    #[allow(static_mut_refs)]
     let parent = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
 
     loop {
@@ -741,6 +753,7 @@ pub unsafe fn sys_wait(status: *mut i32) -> Option<u32> {
 }
 
 pub unsafe fn sys_exit(status: i32) {
+    #[allow(static_mut_refs)]
     let child = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
     let parent = (*child).get_parent() as *mut ProcessControlBlock;
 
@@ -759,11 +772,14 @@ pub unsafe fn sys_exit(status: i32) {
         sys_yield();
 }
 
+#[allow(dead_code)]
 pub unsafe fn sys_getuid() -> u32 {
+        #[allow(static_mut_refs)]
         let proc = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
         (*proc).get_owner()
 }
 
+#[allow(dead_code)]
 pub unsafe fn sys_kill(pid: u32, sig: Sig) -> Result<(),()>{
     for i in 0..MAX_PROCS{
         let ptr = MY_PROCS[i] as *mut ProcessControlBlock;
@@ -780,7 +796,9 @@ pub unsafe fn sys_kill(pid: u32, sig: Sig) -> Result<(),()>{
     Err(())
 }
 
+#[allow(dead_code)]
 pub unsafe fn sys_signal(sig: Sig, handler: u32) -> Option<u32>{
+    #[allow(static_mut_refs)]
     let current_proc = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
     let ret = (*current_proc).get_handler(sig);
     (*current_proc).add_handler(sig, handler);
@@ -788,10 +806,8 @@ pub unsafe fn sys_signal(sig: Sig, handler: u32) -> Option<u32>{
 }
 
 pub unsafe fn sys_fork() -> Option<u32>{
+    #[allow(static_mut_refs)]
     let parent_proc = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
-    let start = (*parent_proc).get_text();
-    let size = (*parent_proc).get_code_size();
-    let parent_pid = (*parent_proc).get_pid();
 
     if let Some(child_proc) = ProcessControlBlock::clone(&*parent_proc){
         unsafe{
@@ -816,6 +832,7 @@ pub unsafe fn sys_fork() -> Option<u32>{
 pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
     if let Some(new_proc) = ProcessControlBlock::new(start, size){
         unsafe{
+            #[allow(static_mut_refs)]
             let current = *CURRENT_PROC.as_ref().unwrap() as *mut ProcessControlBlock;
             (*current).set_state(ProcStatus::Zombie);
             QUEUES[(*new_proc).get_priority()].insert(new_proc);
@@ -857,7 +874,7 @@ pub unsafe fn counter(){
  
          let a = fork();
          if a == 0 {
-             exec_fn((*current_proc).code_text + 0xc0000000, counter as u32, (*current_proc).code_size);
+            let _ = exec_fn((*current_proc).code_text + 0xc0000000, counter as u32, (*current_proc).code_size);
          }
      }
  }
@@ -874,7 +891,7 @@ pub unsafe fn counter(){
  
          let a = fork();
          if a == 0 {
-             exec_fn((*current_proc).code_text + 0xc0000000, wait_user as u32, (*current_proc).code_size);
+             let _ = exec_fn((*current_proc).code_text + 0xc0000000, wait_user as u32, (*current_proc).code_size);
          }
      }
  }

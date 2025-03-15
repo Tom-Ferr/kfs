@@ -34,9 +34,7 @@ use crate::syscalls::{fork, wait};
 #[panic_handler]
 fn panic(_info: &PanicInfo) -> ! {
     if let Some(location) = _info.location() {
-        unsafe{
             printk!(ERROR, "{}, {}", location, _info.message());
-        }
     }
     unsafe { panic_halt(); }
 }
@@ -78,7 +76,7 @@ pub unsafe extern "C" fn kernel(multiboot_info: u32) -> ! {
         panic!();
     }
         
-    load_process(0xC0000000, ke + 0xC0000000);
+    let _ = load_process(0xC0000000, ke + 0xC0000000);
         
     init_idt();
     init_timer();
@@ -86,7 +84,7 @@ pub unsafe extern "C" fn kernel(multiboot_info: u32) -> ! {
         
     welcome_screen();
 
-    exec_fn(0xC0000000, initial_task as u32, ke);
+    let _ = exec_fn(0xC0000000, initial_task as u32, ke);
 
     panic!();
 }

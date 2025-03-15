@@ -5,6 +5,7 @@ pub type SignalQueue = Queue<Signal>;
 
 pub static mut DEFAULT_SIG_HANDLERS: [u32; 31] = [0; 31];
 
+#[allow(dead_code)]
 #[derive(Copy, Clone)]
 #[repr(usize)]
 pub enum Sig {

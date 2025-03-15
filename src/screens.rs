@@ -24,6 +24,7 @@ static ASCII_ART: &[u8] = b"
 pub static mut SCREEN1_BUFFER: ScreenBuff = ScreenBuff::new();
 pub static mut SCREEN2_BUFFER: ScreenBuff = ScreenBuff::new();
 pub static mut SCREEN3_BUFFER: ScreenBuff = ScreenBuff::new();
+#[allow(static_mut_refs)]
 pub static mut CURRENT_SCREEN: *mut ScreenBuff = unsafe{&mut SCREEN1_BUFFER as *mut ScreenBuff};
 
 #[derive(Copy, Clone)]
@@ -90,16 +91,18 @@ pub enum Screen {
 pub unsafe fn change_screen(screen: Screen){
     (*CURRENT_SCREEN).import();
     match screen{
+        #[allow(static_mut_refs)]
         Screen::Screen1 => {CURRENT_SCREEN = &mut SCREEN1_BUFFER as *mut ScreenBuff},
+        #[allow(static_mut_refs)]
         Screen::Screen2 => {CURRENT_SCREEN = &mut SCREEN2_BUFFER as *mut ScreenBuff},
+        #[allow(static_mut_refs)]
         Screen::Screen3 => {CURRENT_SCREEN = &mut SCREEN3_BUFFER as *mut ScreenBuff},
-        _ => {}
     }
     (*CURRENT_SCREEN).export();
 }
                
 pub fn welcome_screen() {
-    let guard = KeyboardGuard::new();
+    let _guard = KeyboardGuard::new();
     clear_vga();
     
     enable_cursor(false);

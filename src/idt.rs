@@ -3,7 +3,6 @@ use core::arch::asm;
 
 use crate::io::outb;
 use crate::syscalls::syscall_handler;
-use crate::get_reg;
 use crate::procs::{CURRENT_TASK, ProcessControlBlock};
 
 #[allow(dead_code)]
@@ -133,6 +132,7 @@ pub struct IntReg{
     ss: u32,
 }
 
+#[allow(dead_code)]
 impl IntReg{
 
     pub fn set_eax(&mut self, value: u32) {

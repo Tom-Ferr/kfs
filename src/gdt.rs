@@ -45,7 +45,7 @@ struct GdtEntries{
 impl GdtEntries {
     fn new() -> Self {
         unsafe{
-
+            #[allow(static_mut_refs)]
             let tss_addr: u32 = _TSS.as_ref() as *const TSS as u32;
             let tss_size: u32 = size_of::<TSS>() as u32 - 1;
             Self{
@@ -80,6 +80,7 @@ impl Gdtr {
 pub fn init_gdt() {
     
     unsafe{
+        #[allow(static_mut_refs)]
         _TSS.init();
         let gdt_entries = GdtEntries::new();
         let gdt_addr = GDT_ADDR as *mut GdtEntries;

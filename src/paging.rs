@@ -1,7 +1,7 @@
-use crate::io::*;
 
 pub static mut ORIGINAL_DIR: PageDirectory = PageDirectory{directory: 0 as *mut AlignedPage, allocs: 0, virtual_allocs: 0};
 
+#[allow(static_mut_refs)]
 pub static mut DIR: *mut PageDirectory = unsafe{&mut ORIGINAL_DIR as *mut PageDirectory};
 
 pub const FRAME_SIZE: u32 = 0x1000;
@@ -23,6 +23,7 @@ struct AlignedPage {
     data: [u32; 1024],
 }
 
+#[allow(dead_code)]
 impl AlignedPage {
     const fn new() -> Self {
         Self {
@@ -203,8 +204,6 @@ pub fn alloc_page(nbytes: usize) -> Option<u32> {
 pub fn free_page(ptr: u32) {
     unsafe {
 
-        #[allow(static_mut_refs)]
-        let dir = &mut *DIR;
         let dir_index: usize = (ptr / PAGE_SIZE) as usize;
         let frame_index: usize = ((ptr / FRAME_SIZE) % 1024) as usize;
         let byte_index: usize = frame_index / 32;
@@ -217,8 +216,6 @@ pub fn free_page(ptr: u32) {
 #[allow(dead_code)]
 pub fn block_pages(addr: u32, len: u32){
     unsafe{
-        #[allow(static_mut_refs)]
-        let dir = &mut *DIR;
         let end = addr + len;
 
         let _begin_offset = addr / PAGE_SIZE;

@@ -331,6 +331,7 @@ fn check_user_space(nbytes: usize, addr: Option<u32>) -> Option<u32>{
     None
 }
 
+#[allow(dead_code)]
 fn umap(nbytes: usize, vaddr: u32, prot: i32) -> Result<(),()> {
 
     let mut nframes = nbytes / FRAME_SIZE as usize;
@@ -368,6 +369,7 @@ fn umap(nbytes: usize, vaddr: u32, prot: i32) -> Result<(),()> {
     Ok(())
 }
 
+#[allow(dead_code)]
 pub fn sys_mmap(addr: Option<u32>, length: usize, prot: i32) -> Option<u32>{
     if let Some(vaddr) = check_user_space(length, addr){
         if let Ok(..) = umap(length, vaddr, prot){
