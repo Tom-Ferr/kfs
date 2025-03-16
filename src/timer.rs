@@ -60,10 +60,7 @@ pub unsafe fn switch_task(_regs: *const IntReg) -> Option<*mut ProcessControlBlo
 
 unsafe fn schedule(_regs: *const IntReg){
     if let Some(current_proc) = CURRENT_PROC {
-        if let Some(signal) = (*current_proc).get_signal(){
-            let handler = (*current_proc).get_handler(signal) as *const fn (i32);
-            (*handler)(signal as i32);
-        }
+        (*(current_proc as *mut ProcessControlBlock)).handle_signal();
     }
     if TICKS % 10 == 0{
         if let Some(proc) = switch_task(_regs){

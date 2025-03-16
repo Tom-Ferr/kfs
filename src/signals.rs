@@ -3,7 +3,7 @@ use crate::malloc::{kmalloc, kfree};
 
 pub type SignalQueue = Queue<Signal>;
 
-pub static mut DEFAULT_SIG_HANDLERS: [u32; 31] = [0; 31];
+pub static mut DEFAULT_SIG_HANDLERS: [fn(i32); 31] = [default_signal_handler; 31];
 
 #[allow(dead_code)]
 #[derive(Copy, Clone)]
@@ -76,4 +76,8 @@ impl Queuable for Signal {
     fn set_next(&mut self, value: *const Signal){
         self.next = value;
     }
+}
+
+fn default_signal_handler(_sig: i32){
+    crate::printf!("default_siganl_handler\n")
 }

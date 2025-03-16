@@ -58,7 +58,7 @@ pub struct ProcessControlBlock {
     code_size: u32,
     pending: SignalQueue,
     blocked: SignalQueue,
-    sig_handlers: [u32; 31],
+    sig_handlers: [fn(i32); 31],
     owner: u32,
     heap: u32,
     brk: u32,
@@ -526,17 +526,7 @@ impl ProcessControlBlock{
         self.regs
     }
     
-    pub fn get_signal(&self) -> Option<Sig> {
-        if let Some(pending_signal) = self.pending.get(){
-            unsafe{
-                let signal = (*pending_signal).get_signal();
-                return Some(signal);
-            } 
-        }
-        None
-    }
-    
-    pub fn get_handler(&self, sig: Sig) -> u32{
+    pub fn get_handler(&self, sig: Sig) -> fn(i32){
         self.sig_handlers[sig as usize - 1]
     }
 
@@ -564,7 +554,19 @@ impl ProcessControlBlock{
         self.parent = parent;
     }
 
-    pub fn add_handler(&mut self, sig: Sig, handler: u32){
+    pub fn handle_signal(&mut self){
+        unsafe{
+            if let Some(pending_signal) = self.pending.get(){
+                let sig = (*pending_signal).get_signal();
+                let handler = self.get_handler(sig);
+                self.pending.remove();
+                kfree(pending_signal as u32);
+                handler(sig as i32);
+            }
+        }
+    }
+
+    pub fn add_handler(&mut self, sig: Sig, handler: fn(i32)){
         self.sig_handlers[sig as usize - 1] = handler;
     }
 
@@ -782,6 +784,9 @@ pub unsafe fn sys_getuid() -> u32 {
 #[allow(dead_code)]
 pub unsafe fn sys_kill(pid: u32, sig: Sig) -> Result<(),()>{
     for i in 0..MAX_PROCS{
+        if MY_PROCS[i] == 0{
+            continue;
+        }
         let ptr = MY_PROCS[i] as *mut ProcessControlBlock;
         if (*ptr).get_pid() == pid {
             if let Some(signal) = Signal::new(sig){
@@ -797,7 +802,7 @@ pub unsafe fn sys_kill(pid: u32, sig: Sig) -> Result<(),()>{
 }
 
 #[allow(dead_code)]
-pub unsafe fn sys_signal(sig: Sig, handler: u32) -> Option<u32>{
+pub unsafe fn sys_signal(sig: Sig, handler: fn(i32)) -> Option<fn(i32)>{
     #[allow(static_mut_refs)]
     let current_proc = *CURRENT_PROC.as_mut().unwrap() as *mut ProcessControlBlock;
     let ret = (*current_proc).get_handler(sig);
@@ -861,61 +866,76 @@ pub unsafe fn load_process(kernel_start: u32, kernel_end: u32) -> Result<(),()> 
     Ok(())
 }
 
-pub unsafe fn counter(){
-    for i in 0..30{
-     crate::printf!("count = {}\n", i);
-     crate::timer::sleep(1);
-    }
-    exit(0);
- }
- 
- pub unsafe fn test(){
-     if let Some(current_proc) = *CURRENT_TASK{
- 
-         let a = fork();
-         if a == 0 {
-            let _ = exec_fn((*current_proc).code_text + 0xc0000000, counter as u32, (*current_proc).code_size);
-         }
-     }
- }
- 
- pub unsafe fn another_user(){
-     loop{
-         crate::printf!("this is another process, pid: {}\n", crate::syscalls::get_pid());
-         crate::timer::sleep(15);
-     }
- }
- 
- pub unsafe fn test_wait(){
-     if let Some(current_proc) = *CURRENT_TASK{
- 
-         let a = fork();
-         if a == 0 {
-             let _ = exec_fn((*current_proc).code_text + 0xc0000000, wait_user as u32, (*current_proc).code_size);
-         }
-     }
- }
- 
- pub unsafe fn wait_user(){
-     let a = fork();
-     if a == 0 {
-         counter();
-     }
-     let mut status: i32 = 42;
-     crate::printf!("waiting, pid: {}\n", get_pid());
-     let child = wait(&mut status);
-     crate::printf!("child pid: {}, exited with value {}\n", child, status);
-     crate::printf!("exiting, pid: {}\n", get_pid());
-     another_user();
- }
-
- pub unsafe fn ps(){
+pub unsafe fn ps(){
     for i in 0..MAX_PROCS {
         let p = MY_PROCS[i];
         if p == 0{
-            continue;
-        }
-        let proc = p as *const crate::procs::ProcessControlBlock;
-        crate::printf!("pid: {}, state: {}, i: {}\n", (*proc).get_pid(), (*proc).get_state() as u32, i);
-    }
+             continue;
+         }
+         let proc = p as *const crate::procs::ProcessControlBlock;
+         crate::printf!("pid: {}, state: {}, i: {}\n", (*proc).get_pid(), (*proc).get_state() as u32, i);
+     }
  }
+
+pub unsafe fn counter(){
+    let pid = get_pid();
+    for i in 0..15{
+     crate::printf!("pid: {}, count = {}\n", pid, i);
+     crate::timer::sleep(1);
+    }
+    crate::printf!("pid: {}, exiting\n", pid);
+    exit(0);
+ }
+ 
+pub unsafe fn test(){
+    if let Some(current_proc) = *CURRENT_TASK{
+ 
+        let a = fork();
+        if a == 0 {
+           let _ = exec_fn((*current_proc).code_text + 0xc0000000, counter as u32, (*current_proc).code_size);
+        }
+    }
+}
+ 
+pub unsafe fn another_user(){
+    loop{
+        crate::printf!("this is another process, pid: {}\n", crate::syscalls::get_pid());
+        crate::timer::sleep(15);
+    }
+}
+ 
+pub unsafe fn test_wait(){
+    if let Some(current_proc) = *CURRENT_TASK{
+ 
+        let a = fork();
+        if a == 0 {
+            let _ = exec_fn((*current_proc).code_text + 0xc0000000, wait_user as u32, (*current_proc).code_size);
+        }
+    }
+}
+ 
+pub unsafe fn wait_user(){
+    let a = fork();
+    if a == 0 {
+        counter();
+    }
+    let mut status: i32 = 42;
+    let pid = get_pid();
+    crate::printf!("pid: {}, waiting\n", pid);
+    let child = wait(&mut status);
+    crate::printf!("pid: {}, child pid_{} exited with value {}\n", pid, child, status);
+    another_user();
+}
+
+pub fn welcome_signal(_sig: i32){
+    crate::printf!("[SIGNAL TRIGGERED]\n");
+}
+
+pub unsafe fn test_signal(){
+    sys_signal(Sig::Kill, welcome_signal);
+    
+}
+
+pub unsafe fn test_kill(){
+    let _ = sys_kill(2, Sig::Kill);
+}
