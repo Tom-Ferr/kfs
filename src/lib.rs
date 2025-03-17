@@ -20,6 +20,7 @@ mod tss;
 mod procs;
 mod queue;
 mod signals;
+mod message;
 
 use crate::screens::welcome_screen;
 use gdt::init_gdt;

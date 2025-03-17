@@ -5,7 +5,7 @@ BOOT_SRC = $(addprefix $(BOOT_DIR), $(BOOT_FILES))
 
 RUST_DIR = src/
 RUST_FILES = lib.rs io.rs utils.rs key_handlers.rs commands.rs screens.rs gdt.rs paging.rs multiboot.rs malloc.rs idt.rs timer.rs keyboard.rs syscalls.rs tss.rs procs.rs\
-			queue.rs signals.rs
+			queue.rs signals.rs message.rs
 RUST_SRC = $(addprefix $(RUST_DIR), $(RUST_FILES))
 
 GRUB_CFG = isofiles/boot/grub/grub.cfg

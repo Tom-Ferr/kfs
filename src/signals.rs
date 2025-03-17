@@ -79,5 +79,5 @@ impl Queuable for Signal {
 }
 
 fn default_signal_handler(_sig: i32){
-    crate::printf!("default_siganl_handler\n")
+    crate::printf!("default_signal_handler\n")
 }

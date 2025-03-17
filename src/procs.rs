@@ -2,6 +2,7 @@ use crate::malloc::{kmalloc, kfree};
 use crate::paging::*;
 use crate::queue::*;
 use crate::signals::*;
+use crate::message::*;
 use core::arch::asm;
 use crate::idt::IntReg;
 use crate::get_reg;
@@ -58,6 +59,7 @@ pub struct ProcessControlBlock {
     code_size: u32,
     pending: SignalQueue,
     blocked: SignalQueue,
+    messages: MessageQueue,
     sig_handlers: [fn(i32); 31],
     owner: u32,
     heap: u32,
@@ -200,6 +202,7 @@ impl ProcessControlBlock {
                 self.sig_handlers = DEFAULT_SIG_HANDLERS;
                 self.pending = SignalQueue::new();
                 self.blocked = SignalQueue::new();
+                self.messages = MessageQueue::new();
                 self.children = ChildQueue::new();
                 self.parent = current_proc;
                 self.owner = 42;
@@ -272,6 +275,7 @@ impl ProcessControlBlock {
                 self.sig_handlers = src.sig_handlers;
                 self.pending = SignalQueue::new();
                 self.blocked = SignalQueue::new();
+                self.messages = MessageQueue::new();
                 self.children = ChildQueue::new();
                 self.parent = current_proc;
                 self.owner = src.owner;
@@ -572,6 +576,10 @@ impl ProcessControlBlock{
 
     pub fn recv_sig(&mut self, signal: *const Signal){
         self.pending.insert(signal as *mut Signal);
+    }
+
+    pub fn recv_message(&mut self, message: *const Message){
+        self.messages.insert(message as *mut Message);
     }
 
     pub fn export_ebp(&self){
@@ -938,4 +946,35 @@ pub unsafe fn test_signal(){
 
 pub unsafe fn test_kill(){
     let _ = sys_kill(2, Sig::Kill);
+}
+
+#[allow(dead_code)]
+pub unsafe fn sys_send(pid: u32, text: &[u8]) -> Result<(),()>{
+    for i in 0..MAX_PROCS{
+        if MY_PROCS[i] == 0{
+            continue;
+        }
+        let ptr = MY_PROCS[i] as *mut ProcessControlBlock;
+        if (*ptr).get_pid() == pid {
+            if let Some(messsage) = Message::new(text){
+                (*ptr).recv_message(messsage);
+                return Ok(());
+            }
+        }
+    }
+    Err(())
+}
+
+#[allow(dead_code)]
+pub unsafe fn sys_receive(){
+    if let Some(current_proc) = CURRENT_PROC {
+        if let Some(message) = (*current_proc).messages.get(){
+            let text = (*message).get_text();
+            let len = (*message).get_length() as u32;
+            (*(current_proc as *mut ProcessControlBlock)).messages.remove();
+            crate::io::put_vga_ptr(text, len);
+            kfree(text as u32);
+            kfree(message as u32);
+        }
+    }
 }
