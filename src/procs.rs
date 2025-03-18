@@ -162,7 +162,7 @@ impl ProcessControlBlock {
         
         self.code_text = 0x00000000;
         self.heap = (code_npage as u32) << 22;
-        self.brk = self.heap + PAGE_SIZE;
+        self.brk = self.heap + FRAME_SIZE;
         self.stack_begin = 0xC0000000 - 4;
         self.stack_limit = 0xC0000000 - stack_size;
 

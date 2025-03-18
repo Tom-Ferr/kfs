@@ -342,7 +342,7 @@ fn umap(nbytes: usize, vaddr: u32, prot: i32) -> Result<(),()> {
     unsafe{
         let mut ptr = vaddr;
         #[allow(static_mut_refs)]
-        let proc = *CURRENT_PROC.as_mut().unwrap();
+        let proc = *CURRENT_PROC.as_mut().unwrap() as *mut crate::procs::ProcessControlBlock;
         let dir = (*proc).get_dir();
         for _ in 0..nframes{
             if let Some(addr) = alloc_page(FRAME_SIZE as usize){
@@ -350,6 +350,8 @@ fn umap(nbytes: usize, vaddr: u32, prot: i32) -> Result<(),()> {
                 let dir_index = (ptr >> 22) as usize;
                 let tab = &mut *(dir.get_page(dir_index) as *mut PageTable);
                 tab.set_frame(tab_index, addr - 0xC0000000, prot as u32);
+                let brk = (*proc).get_brk();
+                (*proc).set_brk(brk as u32 + FRAME_SIZE);
                 ptr += FRAME_SIZE;
             }
             else{
@@ -360,6 +362,8 @@ fn umap(nbytes: usize, vaddr: u32, prot: i32) -> Result<(),()> {
                     let tab = &mut *(dir.get_page(dir_index) as *mut PageTable);
                     let frame = tab.get_frame(tab_index);
                     free_page(frame);
+                    let brk = (*proc).get_brk();
+                    (*proc).set_brk(brk as u32 - FRAME_SIZE);
                     begin += FRAME_SIZE;
                 }
                 return Err(());

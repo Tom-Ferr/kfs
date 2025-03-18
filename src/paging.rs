@@ -169,13 +169,13 @@ impl PageDirectory {
     pub fn new_user_page(&mut self) -> Result<(),()>{
         unsafe{
             if let Some(page) = alloc_page(size_of::<PageTable>()){
+                #[allow(static_mut_refs)]
                 let proc = *crate::procs::CURRENT_PROC.as_ref().unwrap() as *mut crate::procs::ProcessControlBlock;
                 let pg = page as *mut PageTable;
                 pg.write_volatile(PageTable {pages: AlignedPage::new()});
-                let brk = (*proc).get_brk();
-                self.set_page(brk, page, 0x3);
-                (*proc).set_brk(brk as u32 + PAGE_SIZE);
+                let heap = (*proc).get_heap();
                 self.user_allocs += 1;
+                self.set_page(heap + (self.user_allocs * PAGE_SIZE as usize), page, 0x3);
             }
             else{
                 return Err(());
