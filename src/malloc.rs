@@ -291,12 +291,12 @@ fn check_user_space(nbytes: usize, addr: Option<u32>) -> Option<u32>{
         let proc = *CURRENT_PROC.as_mut().unwrap();
         let dir = (*proc).get_dir();
         let heap_index = (*proc).get_heap() >> 22;
-        while ntables > dir.get_allocs(){
-            if let Err(..) = dir.new_page(){
+        while ntables > dir.get_user_allocs(){
+            if let Err(..) = dir.new_user_page(){
                 return None;
             }
         }
-        for offset in dir_hint..=dir.get_allocs(){
+        for offset in dir_hint..=dir.get_user_allocs(){
             for i in tab_hint..1024 {
                 let byte_index: usize = i / 32;
                 let bit_index: usize = i % 32;

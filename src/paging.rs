@@ -1,5 +1,5 @@
 
-pub static mut ORIGINAL_DIR: PageDirectory = PageDirectory{directory: 0 as *mut AlignedPage, allocs: 0, virtual_allocs: 0};
+pub static mut ORIGINAL_DIR: PageDirectory = PageDirectory{directory: 0 as *mut AlignedPage, allocs: 0, virtual_allocs: 0, user_allocs: 0};
 
 #[allow(static_mut_refs)]
 pub static mut DIR: *mut PageDirectory = unsafe{&mut ORIGINAL_DIR as *mut PageDirectory};
@@ -68,6 +68,7 @@ pub struct PageDirectory {
     directory: *mut AlignedPage,
     allocs: usize,
     virtual_allocs: usize,
+    user_allocs: usize,
 }
 
 #[allow(dead_code)]
@@ -84,6 +85,7 @@ impl PageDirectory {
             self.directory = usr;
             self.allocs = (*DIR).allocs;
             self.virtual_allocs = (*DIR).virtual_allocs;
+            self.user_allocs = (*DIR).user_allocs;
         }
     }
 
@@ -96,6 +98,7 @@ impl PageDirectory {
             directory: aligned_page,
             allocs: 0,
             virtual_allocs: 0,
+            user_allocs: 0,
         }
     }
 
@@ -112,6 +115,10 @@ impl PageDirectory {
 
     pub fn get_virtual_allocs(&self) -> usize{
         self.virtual_allocs
+    }
+
+    pub fn get_user_allocs(&self) -> usize{
+        self.user_allocs
     }
 
     pub fn get_directory(&self) -> usize{
@@ -152,6 +159,23 @@ impl PageDirectory {
                 pg.write_volatile(PageTable {pages: AlignedPage::new()});
                 self.set_page(UserSpace::Virtual as usize + offset, page, 0x3);
                 self.virtual_allocs += 1;
+            }
+            else{
+                return Err(());
+            }
+        }
+        Ok(())
+    }
+    pub fn new_user_page(&mut self) -> Result<(),()>{
+        unsafe{
+            if let Some(page) = alloc_page(size_of::<PageTable>()){
+                let proc = *crate::procs::CURRENT_PROC.as_ref().unwrap() as *mut crate::procs::ProcessControlBlock;
+                let pg = page as *mut PageTable;
+                pg.write_volatile(PageTable {pages: AlignedPage::new()});
+                let brk = (*proc).get_brk();
+                self.set_page(brk, page, 0x3);
+                (*proc).set_brk(brk as u32 + PAGE_SIZE);
+                self.user_allocs += 1;
             }
             else{
                 return Err(());

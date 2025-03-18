@@ -162,7 +162,7 @@ impl ProcessControlBlock {
         
         self.code_text = 0x00000000;
         self.heap = (code_npage as u32) << 22;
-        self.brk = self.heap + FRAME_SIZE;
+        self.brk = self.heap + PAGE_SIZE;
         self.stack_begin = 0xC0000000 - 4;
         self.stack_limit = 0xC0000000 - stack_size;
 
@@ -548,6 +548,10 @@ impl ProcessControlBlock{
 
     pub fn set_state(&mut self, new_state: ProcStatus){
         self.state = new_state;
+    }
+
+    pub fn set_brk(&mut self, value: u32){
+        self.brk = value;
     }
 
     pub fn set_regs(&mut self, other: IntReg) {
