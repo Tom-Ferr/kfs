@@ -29,7 +29,7 @@ const EXT2_S_IFIFO: u32 = 0x1000;
 
 const EXT2_S_ISUID: u32 = 0x0800;
 const EXT2_S_ISGID: u32 = 0x0400;
-const EXT2_S_ISGID: u32 = 0x0200;
+const EXT2_S_ISVTX: u32 = 0x0200;
 const EXT2_S_IRWXU: u32 = 0x01C0;
 const EXT2_S_IRUSR: u32 = 0x0100;
 const EXT2_S_IWUSR: u32 = 0x0080;

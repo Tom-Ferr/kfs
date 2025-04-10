@@ -148,6 +148,15 @@ pub unsafe fn inb(port: u16) -> u8 {
     value
 }
 
+pub unsafe fn insl(port: u16, buffer: &mut [u8], count: u32) {
+    asm!(
+        "rep insl",
+        in("dx") port,
+        in("edi") buffer.as_mut_ptr(),
+        in("ecx") count,
+    );
+}
+
 pub fn enable_cursor(swicth: bool) {
     unsafe{
         // Select Cursor Start Register (0x0A)

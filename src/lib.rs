@@ -21,6 +21,9 @@ mod procs;
 mod queue;
 mod signals;
 mod message;
+mod ext2;
+mod vfs;
+mod ide;
 
 use crate::screens::welcome_screen;
 use gdt::init_gdt;
@@ -58,9 +61,9 @@ unsafe fn initial_task() -> ! {
 }
 
 unsafe fn user_land() -> ! {
-    loop{
-            printf!("user_land_pid_{}\n", crate::syscalls::get_pid());
-            crate::timer::sleep(15);
+    loop {
+        printf!("user_land_pid_{}\n", crate::syscalls::get_pid());
+        crate::timer::sleep(15);
     }
 }
 
