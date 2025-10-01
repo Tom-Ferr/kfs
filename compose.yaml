@@ -1,0 +1,20 @@
+
+services:
+  qemu:
+    build: .
+    container_name: qemu
+    command: >
+      "make vnc"
+    devices:
+      - "/dev/kvm:/dev/kvm"
+    volumes:
+      - ./code:/kfs
+
+  novnc:
+    image: hansmeine/novnc:latest
+    ports:
+      - "8080:80"
+    environment:
+      - REMOTE_ADDR=qemu:5900
+    depends_on:
+      - qemu
