@@ -8,6 +8,8 @@ RUST_FILES = lib.rs io.rs utils.rs key_handlers.rs commands.rs screens.rs gdt.rs
 			queue.rs signals.rs message.rs ext2.rs vfs.rs ide.rs
 RUST_SRC = $(addprefix $(RUST_DIR), $(RUST_FILES))
 
+RUST_NIGHTLY_VERSION = nightly-2025-12-01
+
 GRUB_CFG = isofiles/boot/grub/grub.cfg
 
 OBJS = ${BOOT_SRC:.s=.o}
@@ -43,8 +45,8 @@ endif
 check-rust-nightly: check-rust
 ifeq ($(shell ${RUST_PATH}rustup show | grep -q 'nightly' && echo yes || echo no), no)
 	@sudo echo "rust-nightly is not installed. Installing rust-nightly..."
-	@${RUST_PATH}rustup install nightly
-	@${RUST_PATH}rustup component add rust-src --toolchain nightly-x86_64-unknown-linux-gnu
+	@${RUST_PATH}rustup toolchain install ${RUST_NIGHTLY_VERSION}
+	@${RUST_PATH}rustup component add rust-src --toolchain ${RUST_NIGHTLY_VERSION}-x86_64-unknown-linux-gnu
 endif
 
 check-xorriso:
@@ -73,7 +75,7 @@ endif
 
 
 ${LIB}: ${RUST_SRC} Cargo.toml .cargo/config.toml
-	${RUST_PATH}cargo build
+	${RUST_PATH}cargo +${RUST_NIGHTLY_VERSION} build --target kfs.json
 
 ${NAME}: ${LINKER_FILE} ${OBJS} ${LIB}
 	ld -m elf_i386 -n -o ${NAME} -T ${LINKER_FILE} ${OBJS} ${LIB}
