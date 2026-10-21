@@ -701,6 +701,7 @@ impl ProcessControlBlock{
                 let mut_init = init as *mut ProcessControlBlock;
                 while let Some(child) = self.get_child(){
                     (*mut_init).add_child(child);
+                    (*(child as *mut ProcessControlBlock)).set_parent(init);
                     self.remove_child();
                 }
             }
@@ -866,6 +867,27 @@ pub fn exec_fn(start: u32, func: u32, size: u32) -> Result<(),()> {
     Ok(())
 }
 
+pub fn exec_initial_task(start: u32, func: u32, size: u32) -> Result<(),()> {
+    if let Some(new_proc) = ProcessControlBlock::new(start, size){
+        unsafe{
+            INIT_PROC = Some(new_proc);
+            #[allow(static_mut_refs)]
+            let current = *CURRENT_PROC.as_ref().unwrap() as *mut ProcessControlBlock;
+            (*current).set_state(ProcStatus::Zombie);
+            QUEUES[(*new_proc).get_priority()].insert(new_proc);
+            (*new_proc).change_process();
+            (*new_proc).change_context();
+            (*new_proc).set_state(ProcStatus::Running);
+            
+            switch_to_user_mode((*new_proc).get_user_esp(), func - 0xc0000000);
+        }
+    }
+    else{
+        return Err(());
+    }
+    Ok(())
+}
+
 pub unsafe fn load_process(kernel_start: u32, kernel_end: u32) -> Result<(),()> {
     if let Some(my_proc) = ProcessControlBlock::load(kernel_start, kernel_end){
         CURRENT_PROC = Some(my_proc);
@@ -903,8 +925,9 @@ pub unsafe fn test(){
     if let Some(current_proc) = *CURRENT_TASK{
  
         let a = fork();
-        if a == 0 {
-           let _ = exec_fn((*current_proc).code_text + 0xc0000000, counter as u32, (*current_proc).code_size);
+        if a != 0 {
+            exit(42);
+        //    let _ = exec_fn((*current_proc).code_text + 0xc0000000, counter as u32, (*current_proc).code_size);
         }
     }
 }

@@ -32,7 +32,7 @@ use multiboot::apply_mmap_info;
 use idt::init_idt;
 use timer::init_timer;
 use keyboard::init_keyboard;
-use crate::procs::{exec_fn, load_process};
+use crate::procs::{exec_fn, load_process, exec_initial_task};
 use crate::syscalls::{fork, wait};
 
 #[panic_handler]
@@ -57,6 +57,7 @@ unsafe fn initial_task() -> ! {
     let mut status: i32 = 42;
     loop{
         wait(&mut status);
+        printf!("here\n");
     }
 }
 
@@ -88,7 +89,7 @@ pub unsafe extern "C" fn kernel(multiboot_info: u32) -> ! {
         
     welcome_screen();
 
-    let _ = exec_fn(0xC0000000, initial_task as u32, ke);
+    let _ = exec_initial_task(0xC0000000, initial_task as u32, ke);
 
     panic!();
 }
